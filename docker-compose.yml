@@ -1,0 +1,17 @@
+services:
+  gym-face-checkin:
+    build: .
+    container_name: gym_face_checkin
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/app/data
+      - CAMERA_INDEX=0
+    volumes:
+      - ./data:/app/data
+    devices:
+      # Linux-only: passes the host's webcam device node into the container.
+      # If your camera isn't /dev/video0, check with `ls /dev/video*` on the
+      # host and update this line (and CAMERA_INDEX above if needed).
+      - "/dev/video0:/dev/video0"

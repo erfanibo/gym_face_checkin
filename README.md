@@ -1,0 +1,174 @@
+# سیستم لوکال تشخیص چهره برای پذیرش باشگاه
+
+## معماری
+
+```
+دوربین USB  --cv2.VideoCapture-->  ترد پس‌زمینه (FaceEngine)
+                                        |
+                                        |-- شناخته‌شده؟ --> attendance_log
+                                        |-- در صف اخیر؟ --> فقط last_seen_at آپدیت می‌شود (آنتی‌اسپم ۲ دقیقه‌ای)
+                                        |-- ناشناسِ جدید --> عکس ذخیره + ردیف در pending_queue + broadcast روی WebSocket
+                                        |
+                                   SQLite (یک فایل، با قفل مشترک)
+                                        |
+                                   FastAPI (routes + /ws/queue)
+                                        |
+                                   پنل پذیرش (frontend/index.html)
+```
+
+نکتهٔ کلیدی: چون `cv2.VideoCapture` و `face_recognition` عملیات سنگین و بلاک‌کننده هستند، حلقهٔ دوربین در یک **ترد جداگانه** (نه یک تسک asyncio) اجرا می‌شود تا سرور FastAPI و اتصال‌های WebSocket هیچ‌وقت فریز نشوند. ارتباط این ترد با دنیای asyncio از طریق `asyncio.run_coroutine_threadsafe` انجام می‌شود (`face_engine.py`).
+
+## ساختار پروژه
+
+```
+gym_face_checkin/
+├── app/
+│   ├── main.py          # اپ FastAPI، lifespan، mount استاتیک/پنل، وب‌سوکت
+│   ├── config.py         # همهٔ پارامترهای قابل‌تنظیم (تلورانس تطبیق، آستانه آنتی‌اسپم، ...)
+│   ├── database.py       # اسکیمای SQLite + دسترسی ترد-امن
+│   ├── face_engine.py    # هستهٔ اصلی: حلقهٔ دوربین + منطق تطبیق/صف/تردد
+│   ├── ws_manager.py     # مدیریت اتصال‌های WebSocket پنل پذیرش
+│   ├── models.py         # اسکیمای Pydantic برای API
+│   └── routers/
+│       ├── queue.py      # GET/POST/DELETE صف انتظار
+│       └── users.py      # GET کاربران ثبت‌شده + تاریخچهٔ تردد
+├── frontend/index.html   # پنل پذیرش (HTML/JS خام، بدون نیاز به build)
+├── static/               # عکس‌های ذخیره‌شده (pending_faces, user_photos)
+├── requirements.txt
+├── run.py
+└── gym_face.db           # بعد از اولین اجرا خودکار ساخته می‌شود
+```
+
+## ساختار دیتابیس
+
+**`registered_users`**
+| ستون | نوع | توضیح |
+|---|---|---|
+| id | INTEGER PK | |
+| membership_code | TEXT UNIQUE | کد عضویت، اختیاری هنگام ثبت |
+| full_name | TEXT | |
+| phone | TEXT | |
+| encoding | BLOB | بردار ۱۲۸ بعدی (float64) چهره |
+| photo_path | TEXT | مسیر عکس |
+| created_at | TEXT | |
+
+**`pending_queue`**
+| ستون | نوع | توضیح |
+|---|---|---|
+| id | INTEGER PK | |
+| encoding | BLOB | |
+| photo_path | TEXT | عکس کراپ‌شدهٔ چهره |
+| first_seen_at / last_seen_at | TEXT | برای منطق آنتی‌اسپم ۲ دقیقه‌ای |
+| status | TEXT | `pending` / `registered` / `rejected` |
+| registered_user_id | INTEGER | بعد از ثبت‌نام پر می‌شود |
+
+**`attendance_log`** (اضافه‌شده، در بریف نبود ولی برای «ثبت تردد» لازم است)
+| ستون | نوع | توضیح |
+|---|---|---|
+| id | INTEGER PK | |
+| user_id | INTEGER FK | |
+| checkin_at | TEXT | |
+
+## نصب
+
+```bash
+python3 -m venv venv
+source venv/bin/activate        # ویندوز: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+⚠️ **نکتهٔ مهم دربارهٔ `face_recognition`**: این کتابخانه روی `dlib` بنا شده که از سورس کامپایل می‌شود و به `cmake` + یک کامپایلر C++ نیاز دارد. قبل از `pip install -r requirements.txt`:
+
+- **اوبونتو/دبیان:** `sudo apt install cmake build-essential libopenblas-dev liblapack-dev`
+- **ویندوز:** نصب "Desktop development with C++" از Visual Studio Build Tools ساده‌تر است، یا از ویل‌ (wheel) پیش‌کامپایل‌شدهٔ dlib استفاده کنید.
+- کامپایل ممکن است چند دقیقه طول بکشد؛ این طبیعی است.
+
+## اجرا
+
+```bash
+python run.py
+```
+
+سپس:
+- پنل پذیرش: `http://localhost:8000/panel/`
+- مستندات API: `http://localhost:8000/docs`
+
+## اجرا با Docker
+
+پروژه یک `Dockerfile` (چندمرحله‌ای، چون کامپایل dlib سنگینه) و یک `docker-compose.yml` آماده دارد.
+
+```bash
+docker compose up --build -d
+docker compose logs -f     # دیدن لاگ‌ها، از جمله خطای احتمالی دوربین
+```
+
+بعد از بالا آمدن: پنل روی `http://localhost:8000/panel/` و مستندات API روی `http://localhost:8000/docs`.
+
+### ⚠️ نکتهٔ حیاتی: دسترسی داکر به وب‌کم
+
+این مورد مهم‌ترین محدودیتِ اجرای این پروژه با Docker است و باید قبل از دیپلوی بدانید:
+
+- **لینوکس (توصیه‌شده برای production):** داکر با فلگ `devices` در `docker-compose.yml` مستقیم به `/dev/video0` روی هاست دسترسی پیدا می‌کند و کار می‌کند. با `ls /dev/video*` روی هاست مطمئن شوید مسیر درست است (اگر متفاوت بود، هم در `docker-compose.yml` و هم مقدار `CAMERA_INDEX` را عوض کنید).
+- **مک (macOS):** Docker Desktop داخل یک ماشین مجازی اجرا می‌شود و passthrough مستقیم وب‌کم USB/داخلی را **پشتیبانی نمی‌کند** — این محدودیت خود Docker Desktop است، نه این پروژه. برای توسعه روی مک، پروژه را مستقیم با `python run.py` (بدون داکر) اجرا کنید؛ از داکر فقط برای دیپلوی نهایی روی سرور/PC لینوکسی کنار دوربین استفاده کنید.
+- **ویندوز:** مشابه مک، Docker Desktop استاندارد passthrough وب‌کم ندارد. راه‌حل‌های نیمه‌پیشرفته‌ای مثل ابزار [`usbipd-win`](https://github.com/dorssel/usbipd-win) برای اتصال دستگاه USB به WSL2 وجود دارد، ولی برای production همچنان یک PC لینوکسی کنار دوربین ساده‌تر و پایدارتر است.
+
+خلاصه: **معماری این سیستم ("سرور کنار دوربین") ذاتاً برای یک هاست لینوکسی طراحی شده** — چه با Docker چه بدون آن. اگر قصد دارید Docker را روی همان PC لینوکسی که دوربین به آن وصل است اجرا کنید (رایج‌ترین حالت برای این نوع سیستم)، همه‌چیز مثل بالا کار می‌کند.
+
+### پایداری داده‌ها (Volume)
+
+پوشهٔ `./data` روی هاست به `/app/data` داخل کانتینر مپ شده و شامل `gym_face.db` و عکس‌های `static/` است. با `docker compose down` یا rebuild کردن ایمیج، این داده‌ها از بین نمی‌روند. برای پاک‌سازی کامل (مثلاً شروع دوباره از صفر):
+
+```bash
+docker compose down
+rm -rf ./data
+docker compose up --build -d
+```
+
+### متغیرهای محیطی
+
+| متغیر | پیش‌فرض | توضیح |
+|---|---|---|
+| `DATA_DIR` | `/app/data` (در داکر) | مسیر ذخیرهٔ دیتابیس و عکس‌ها |
+| `CAMERA_INDEX` | `0` | ایندکس دوربین داخل کانتینر |
+
+## آماده‌سازی و push به GitHub
+
+پوشه از قبل با `git init` آماده شده و یک `.gitignore` مناسب دارد (دیتابیس، عکس‌های ذخیره‌شدهٔ چهره، `venv/`، و غیره را کنار می‌گذارد — این‌ها داده‌های واقعی کاربران هستند و نباید وارد کنترل نسخه شوند). برای اتصال به یک ریپوی واقعی روی گیت‌هاب:
+
+```bash
+git add -A
+git commit -m "Initial commit: gym face check-in system"
+
+# روش ۱: با GitHub CLI (ساده‌ترین، هم ریپو رو می‌سازه هم push می‌کنه)
+gh repo create gym-face-checkin --private --source=. --remote=origin --push
+
+# روش ۲: دستی (بعد از ساخت ریپوی خالی در وب‌سایت گیت‌هاب)
+git remote add origin git@github.com:USERNAME/gym-face-checkin.git
+git branch -M main
+git push -u origin main
+```
+
+⚠️ **قبل از public کردن ریپو**: مطمئن شوید `data/` و `gym_face.db` هیچ‌وقت commit نشده‌اند (`.gitignore` این کار را می‌کند، ولی یک بار با `git status` چک کنید) — این فایل‌ها شامل تصاویر و بردارهای بیومتریک اعضای واقعی باشگاه هستند.
+
+## نکات تنظیم (`app/config.py`)
+
+| پارامتر | پیش‌فرض | توضیح |
+|---|---|---|
+| `CAMERA_INDEX` | 0 | اگر چند دوربین دارید عوض کنید |
+| `PROCESS_EVERY_N_FRAMES` | 5 | بالاتر = مصرف CPU کمتر ولی تأخیر تشخیص بیشتر |
+| `KNOWN_USER_TOLERANCE` | 0.5 | پایین‌تر = سخت‌گیرانه‌تر برای تشخیص عضو (کمتر false-positive) |
+| `PENDING_DEDUP_TOLERANCE` | 0.5 | آستانهٔ «همون فرد ناشناس هنوز جلوی دوربینه» |
+| `PENDING_DEDUP_WINDOW_SECONDS` | 120 | همون بازهٔ ۲ دقیقه‌ای آنتی‌اسپم که در بریف خواسته شده بود |
+| `ATTENDANCE_COOLDOWN_SECONDS` | 300 | برای جلوگیری از ثبت چندبارهٔ تردد یک عضو در چند ثانیه — این مورد در بریف نبود، بر اساس منطق اضافه شد |
+
+این‌ها را حتماً با نور و دوربین واقعی محل تست و کالیبره کنید؛ مقادیر تلورانس بسته به کیفیت دوربین متفاوت عمل می‌کنند.
+
+## محدودیت‌ها و گام‌های بعدی (فاز اول عمداً ساده نگه داشته شده)
+
+1. **بدون احراز هویت روی پنل** — طبق تصمیم فعلی؛ قبل از دیپلوی در شبکهٔ عمومی حتماً لاگین اضافه شود.
+2. **یک دوربین / یک پردازش** — برای چند شعبه یا چند دوربین باید هر شعبه یک نمونهٔ جدا (یا صف پیام مثل Redis) داشته باشد.
+3. **SQLite تک‌فایلی** — برای زیر ۲۰۰ کاربر و بار ترافیکی یک باشگاه کاملاً کافی است؛ اگر بعداً چند شعبه/سرور همزمان نیاز شد باید به Postgres مهاجرت کرد.
+4. **کیفیت تشخیص در نور کم** یا با ماسک/عینک افت می‌کند — این محدودیت خود کتابخانهٔ `face_recognition` (مبتنی بر dlib HOG/CNN) است، نه یک باگ در این پیاده‌سازی.
+5. می‌توانید بعداً یک اسکریپت پاک‌سازی (cron) اضافه کنید که ردیف‌های `rejected` قدیمی و عکس‌های متناظرشان را حذف کند تا حجم `static/pending_faces` رشد نکند.
+
+هر بخشی از این کد که بخواهید عمیق‌تر توضیح بدم یا تغییرش بدیم (مثلاً افزودن لاگین اپراتور، چند دوربین، یا گزارش‌گیری تردد) بگو تا ادامه بدیم.

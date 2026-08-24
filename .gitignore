@@ -1,0 +1,26 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Environment / secrets
+.env
+
+# Project data — this is real people's biometric data + a live database,
+# it must never end up in version control (also see README > Privacy note)
+gym_face.db
+data/
+static/pending_faces/*
+static/user_photos/*
+!static/pending_faces/.gitkeep
+!static/user_photos/.gitkeep
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

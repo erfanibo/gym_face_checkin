@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>پنل پذیرش | باشگاه</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12161c;
+    --panel: #1a2029;
+    --panel-2: #212936;
+    --line: #2b3444;
+    --text: #e7ebf1;
+    --muted: #8b95a7;
+    --accent: #3ddc97;
+    --accent-dim: #1f5b41;
+    --warn: #f2a154;
+    --danger: #e05656;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  header h1 { font-size: 18px; font-weight: 700; margin: 0; }
+  header h1 span { color: var(--muted); font-weight: 400; font-size: 13px; margin-right: 8px; }
+  .status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--danger);
+    box-shadow: 0 0 0 3px rgba(224,86,86,0.15);
+    transition: background .2s, box-shadow .2s;
+  }
+  .dot.live {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(61,220,151,0.15);
+  }
+
+  main { padding: 26px 28px 60px; max-width: 1200px; margin: 0 auto; }
+  .section-title {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 0 0 16px;
+  }
+  .section-title h2 { font-size: 15px; margin: 0; color: var(--text); }
+  .count-badge {
+    background: var(--accent-dim); color: var(--accent);
+    font-size: 12px; font-weight: 600;
+    padding: 2px 9px; border-radius: 999px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    animation: appear .25s ease-out;
+  }
+  @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .card img {
+    width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+    background: #0d1015; display: block;
+  }
+  .card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .waited { font-size: 12px; color: var(--muted); }
+  .card-actions { display: flex; gap: 8px; }
+  button {
+    font-family: inherit; border: none; border-radius: 9px;
+    padding: 8px 10px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: filter .15s, transform .05s;
+  }
+  button:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #08261a; flex: 1; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: transparent; color: var(--danger); border: 1px solid rgba(224,86,86,0.35); }
+  .btn-ghost:hover { background: rgba(224,86,86,0.08); }
+
+  .empty {
+    padding: 50px 20px; text-align: center; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: 14px; font-size: 14px;
+  }
+
+  .feed { margin-top: 34px; }
+  .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  .feed-item {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-size: 13px; padding: 9px 12px;
+    background: var(--panel-2); border-radius: 9px; color: var(--muted);
+  }
+  .feed-item b { color: var(--text); font-weight: 600; }
+
+  /* modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(6,8,11,0.65);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+    padding: 20px;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; width: 100%; max-width: 380px;
+    padding: 22px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .modal img {
+    width: 96px; height: 96px; border-radius: 12px; object-fit: cover;
+    align-self: center; border: 1px solid var(--line);
+  }
+  .modal h3 { margin: 0; font-size: 16px; text-align: center; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  input {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 9px; padding: 10px 12px;
+    font-family: inherit; font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .field { margin-bottom: 4px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); flex: 1; }
+  .error-msg { color: var(--danger); font-size: 12px; min-height: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
+  <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
+</header>
+
+<main>
+  <div class="section-title">
+    <h2>افراد در انتظار ثبت‌نام</h2>
+    <span class="count-badge" id="pendingCount">0</span>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="emptyState" class="empty" style="display:none">فعلاً کسی در صف پذیرش نیست. به محض شناسایی یک چهره جدید جلوی دوربین، اینجا نمایش داده می‌شود.</div>
+
+  <div class="feed">
+    <div class="section-title"><h2>ورودهای اخیر</h2></div>
+    <div id="feedList" class="feed-list"></div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <img id="modalPhoto" src="" alt="عکس مشتری" />
+    <h3>ثبت‌نام مشتری جدید</h3>
+    <div class="field">
+      <label>نام و نام خانوادگی</label>
+      <input id="fullName" type="text" placeholder="مثلاً: علی رضایی" />
+    </div>
+    <div class="field">
+      <label>شماره تماس</label>
+      <input id="phone" type="tel" placeholder="09xxxxxxxxx" />
+    </div>
+    <div class="field">
+      <label>کد عضویت (اختیاری)</label>
+      <input id="membershipCode" type="text" placeholder="در صورت خالی بودن بعداً تخصیص یابد" />
+    </div>
+    <div class="error-msg" id="modalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal()">انصراف</button>
+      <button class="btn-primary" onclick="submitRegistration()">ذخیره و ثبت‌نام</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '';
+let activePendingId = null;
+const pendingItems = new Map(); // id -> item data, kept in sync with server
+
+function timeAgo(iso) {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds} ثانیه پیش`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} دقیقه پیش`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} ساعت پیش`;
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  const items = [...pendingItems.values()].sort((a, b) => new Date(b.first_seen_at) - new Date(a.first_seen_at));
+
+  document.getElementById('pendingCount').textContent = items.length;
+  document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+
+  grid.innerHTML = items.map(item => `
+    <div class="card" data-id="${item.id}">
+      <img src="${item.photo_url}" alt="چهره ناشناس" />
+      <div class="card-body">
+        <div class="waited">⏱ ${timeAgo(item.first_seen_at)}</div>
+        <div class="card-actions">
+          <button class="btn-primary" onclick="openModal(${item.id})">ثبت‌نام</button>
+          <button class="btn-ghost" onclick="rejectPending(${item.id})">رد</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addFeedItem(text) {
+  const list = document.getElementById('feedList');
+  const el = document.createElement('div');
+  el.className = 'feed-item';
+  el.innerHTML = text;
+  list.prepend(el);
+  while (list.children.length > 30) list.removeChild(list.lastChild);
+}
+
+async function loadPending() {
+  const res = await fetch(`${API_BASE}/api/queue`);
+  const items = await res.json();
+  pendingItems.clear();
+  items.forEach(i => pendingItems.set(i.id, i));
+  render();
+}
+
+function openModal(id) {
+  const item = pendingItems.get(id);
+  if (!item) return;
+  activePendingId = id;
+  document.getElementById('modalPhoto').src = item.photo_url;
+  document.getElementById('fullName').value = '';
+  document.getElementById('phone').value = '';
+  document.getElementById('membershipCode').value = '';
+  document.getElementById('modalError').textContent = '';
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeModal() {
+  activePendingId = null;
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function submitRegistration() {
+  const full_name = document.getElementById('fullName').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const membership_code = document.getElementById('membershipCode').value.trim();
+  const errorEl = document.getElementById('modalError');
+
+  if (full_name.length < 2) {
+    errorEl.textContent = 'لطفاً نام کامل را وارد کنید.';
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/api/queue/${activePendingId}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      full_name,
+      phone: phone || null,
+      membership_code: membership_code || null,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = err.detail || 'خطا در ثبت‌نام. دوباره تلاش کنید.';
+    return;
+  }
+
+  pendingItems.delete(activePendingId);
+  render();
+  closeModal();
+}
+
+async function rejectPending(id) {
+  await fetch(`${API_BASE}/api/queue/${id}`, { method: 'DELETE' });
+  pendingItems.delete(id);
+  render();
+}
+
+// re-render "N seconds ago" labels periodically
+setInterval(render, 10000);
+
+// ---- WebSocket live updates ----
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/queue`);
+  const dot = document.getElementById('wsDot');
+  const label = document.getElementById('wsLabel');
+
+  ws.onopen = () => { dot.classList.add('live'); label.textContent = 'اتصال زنده برقرار است'; };
+  ws.onclose = () => {
+    dot.classList.remove('live');
+    label.textContent = 'اتصال قطع شد، تلاش مجدد...';
+    setTimeout(connectWs, 2000);
+  };
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.event === 'new_pending') {
+      pendingItems.set(msg.id, msg);
+      render();
+    } else if (msg.event === 'pending_resolved') {
+      pendingItems.delete(msg.id);
+      render();
+    } else if (msg.event === 'checkin') {
+      const time = new Date(msg.checkin_at).toLocaleTimeString('fa-IR');
+      addFeedItem(`<span><b>${msg.full_name}</b> وارد شد</span><span>${time}</span>`);
+    }
+  };
+}
+
+loadPending();
+connectWs();
+</script>
+
+</body>
+</html>

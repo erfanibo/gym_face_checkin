@@ -1,0 +1,19 @@
+.git
+.gitignore
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# runtime data now lives under DATA_DIR / the ./data bind mount, not in the
+# image itself
+data/
+gym_face.db
+static/pending_faces/*
+static/user_photos/*
+!static/pending_faces/.gitkeep
+!static/user_photos/.gitkeep
+
+README.md
