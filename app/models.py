@@ -22,9 +22,12 @@ class RegisteredUserOut(BaseModel):
     phone: Optional[str]
     photo_url: Optional[str]
     created_at: str
+    last_checkin_at: Optional[str] = None
+    last_event_type: Optional[str] = None  # 'in' | 'out' | None (هرگز تردد ثبت نشده)
 
 
 class AttendanceEvent(BaseModel):
     user_id: int
     full_name: str
+    event_type: str
     checkin_at: str

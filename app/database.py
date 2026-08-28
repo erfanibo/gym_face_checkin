@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS pending_queue (
 CREATE TABLE IF NOT EXISTS attendance_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES registered_users(id),
+    event_type  TEXT NOT NULL DEFAULT 'in',   -- 'in' (ورود) یا 'out' (خروج)
     checkin_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -79,8 +80,17 @@ def db_cursor(commit: bool = False):
             cur.close()
 
 
+def _migrate(conn: sqlite3.Connection):
+    """Add columns that were introduced after the initial CREATE TABLE, for
+    any database file created by an earlier version of this project."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(attendance_log)")}
+    if "event_type" not in cols:
+        conn.execute("ALTER TABLE attendance_log ADD COLUMN event_type TEXT NOT NULL DEFAULT 'in'")
+
+
 def init_db():
     conn = get_raw_connection()
     with _lock:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         conn.commit()

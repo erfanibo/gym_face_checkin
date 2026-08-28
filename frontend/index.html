@@ -101,6 +101,37 @@
     border: 1px dashed var(--line); border-radius: 14px; font-size: 14px;
   }
 
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .tab-btn {
+    background: transparent; color: var(--muted); border-radius: 9px 9px 0 0;
+    padding: 10px 18px; font-size: 14px; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .search-box { margin-bottom: 16px; }
+  .search-box input { max-width: 320px; }
+
+  .member-list { display: flex; flex-direction: column; gap: 10px; }
+  .member-row {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 14px;
+  }
+  .member-row img {
+    width: 48px; height: 48px; border-radius: 10px; object-fit: cover;
+    background: #0d1015; flex-shrink: 0;
+  }
+  .member-info { flex: 1; min-width: 0; }
+  .member-name { font-weight: 600; font-size: 14px; }
+  .member-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .member-status { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+  .status-in { background: var(--accent-dim); color: var(--accent); }
+  .status-out { background: #3a2430; color: var(--warn); }
+  .status-none { background: var(--panel-2); color: var(--muted); }
+
   .feed { margin-top: 34px; }
   .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
   .feed-item {
@@ -148,16 +179,35 @@
 </header>
 
 <main>
-  <div class="section-title">
-    <h2>افراد در انتظار ثبت‌نام</h2>
-    <span class="count-badge" id="pendingCount">0</span>
+  <div class="tabs">
+    <button class="tab-btn active" id="tabBtnQueue" onclick="showTab('queue')">صف انتظار</button>
+    <button class="tab-btn" id="tabBtnMembers" onclick="showTab('members')">اعضا</button>
   </div>
-  <div id="grid" class="grid"></div>
-  <div id="emptyState" class="empty" style="display:none">فعلاً کسی در صف پذیرش نیست. به محض شناسایی یک چهره جدید جلوی دوربین، اینجا نمایش داده می‌شود.</div>
 
-  <div class="feed">
-    <div class="section-title"><h2>ورودهای اخیر</h2></div>
-    <div id="feedList" class="feed-list"></div>
+  <div class="tab-panel active" id="tabQueue">
+    <div class="section-title">
+      <h2>افراد در انتظار ثبت‌نام</h2>
+      <span class="count-badge" id="pendingCount">0</span>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div id="emptyState" class="empty" style="display:none">فعلاً کسی در صف پذیرش نیست. به محض شناسایی یک چهره جدید جلوی دوربین، اینجا نمایش داده می‌شود.</div>
+
+    <div class="feed">
+      <div class="section-title"><h2>ورودهای اخیر</h2></div>
+      <div id="feedList" class="feed-list"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tabMembers">
+    <div class="section-title">
+      <h2>اعضای ثبت‌شده</h2>
+      <span class="count-badge" id="memberCount">0</span>
+    </div>
+    <div class="search-box">
+      <input id="memberSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderMembers()" />
+    </div>
+    <div id="memberList" class="member-list"></div>
+    <div id="memberEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
   </div>
 </main>
 
@@ -188,7 +238,9 @@
 <script>
 const API_BASE = '';
 let activePendingId = null;
+let activeTab = 'queue';
 const pendingItems = new Map(); // id -> item data, kept in sync with server
+let members = []; // loaded lazily the first time the "اعضا" tab is opened
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -197,6 +249,15 @@ function timeAgo(iso) {
   if (minutes < 60) return `${minutes} دقیقه پیش`;
   const hours = Math.floor(minutes / 60);
   return `${hours} ساعت پیش`;
+}
+
+function showTab(name) {
+  activeTab = name;
+  document.getElementById('tabQueue').classList.toggle('active', name === 'queue');
+  document.getElementById('tabMembers').classList.toggle('active', name === 'members');
+  document.getElementById('tabBtnQueue').classList.toggle('active', name === 'queue');
+  document.getElementById('tabBtnMembers').classList.toggle('active', name === 'members');
+  if (name === 'members') loadMembers();
 }
 
 function render() {
@@ -235,6 +296,44 @@ async function loadPending() {
   pendingItems.clear();
   items.forEach(i => pendingItems.set(i.id, i));
   render();
+}
+
+async function loadMembers() {
+  const res = await fetch(`${API_BASE}/api/users`);
+  members = await res.json();
+  renderMembers();
+}
+
+function statusBadge(member) {
+  if (!member.last_event_type) return '<span class="member-status status-none">هنوز تردد ندارد</span>';
+  if (member.last_event_type === 'in') return '<span class="member-status status-in">داخل باشگاه</span>';
+  return '<span class="member-status status-out">خارج شده</span>';
+}
+
+function renderMembers() {
+  const query = (document.getElementById('memberSearch').value || '').trim().toLowerCase();
+  const filtered = members.filter(m => {
+    if (!query) return true;
+    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
+  });
+
+  document.getElementById('memberCount').textContent = members.length;
+  document.getElementById('memberEmptyState').style.display = filtered.length ? 'none' : 'block';
+
+  const list = document.getElementById('memberList');
+  list.innerHTML = filtered.map(m => `
+    <div class="member-row">
+      <img src="${m.photo_url || ''}" alt="${m.full_name}" onerror="this.style.visibility='hidden'" />
+      <div class="member-info">
+        <div class="member-name">${m.full_name}</div>
+        <div class="member-meta">
+          ${m.membership_code ? `کد: ${m.membership_code} · ` : ''}${m.phone || 'بدون شماره تماس'}
+          ${m.last_checkin_at ? ` · آخرین تردد: ${timeAgo(m.last_checkin_at)}` : ''}
+        </div>
+      </div>
+      ${statusBadge(m)}
+    </div>
+  `).join('');
 }
 
 function openModal(id) {
@@ -320,7 +419,15 @@ function connectWs() {
       render();
     } else if (msg.event === 'checkin') {
       const time = new Date(msg.checkin_at).toLocaleTimeString('fa-IR');
-      addFeedItem(`<span><b>${msg.full_name}</b> وارد شد</span><span>${time}</span>`);
+      const verb = msg.event_type === 'out' ? 'خارج شد' : 'وارد شد';
+      addFeedItem(`<span><b>${msg.full_name}</b> ${verb}</span><span>${time}</span>`);
+
+      const member = members.find(m => m.id === msg.user_id);
+      if (member) {
+        member.last_event_type = msg.event_type;
+        member.last_checkin_at = msg.checkin_at;
+        if (activeTab === 'members') renderMembers();
+      }
     }
   };
 }

@@ -32,12 +32,29 @@ FRAME_RESIZE_SCALE = 0.25        # frame is downscaled by this factor before det
 KNOWN_USER_TOLERANCE = 0.5
 
 # Threshold used ONLY to decide "is this the same unknown person still standing
-# in front of the camera" (anti-spam), not for real identification.
-PENDING_DEDUP_TOLERANCE = 0.5
+# in front of the camera" (anti-spam), not for real identification. Slightly
+# looser than KNOWN_USER_TOLERANCE on purpose: a false positive here just means
+# skipping one duplicate photo (harmless), while a false negative means the
+# same person gets re-photographed and re-queued repeatedly (the bug we saw).
+PENDING_DEDUP_TOLERANCE = 0.58
+
+# How many of the most recent encodings to keep per pending queue entry for
+# the comparison above. Comparing against several recent samples (not just
+# the very first one) absorbs natural pose/expression drift while someone
+# stands at the camera for a while.
+PENDING_DEDUP_MAX_SAMPLES = 5
 
 # Anti-spam window from the spec: ignore repeated captures of the same unknown
 # face for this many seconds after it was first/last seen.
 PENDING_DEDUP_WINDOW_SECONDS = 120  # 2 minutes
+
+# Used at REGISTRATION time: if the face being registered already matches an
+# existing member this closely, block the registration instead of creating a
+# second membership record for the same physical person. Kept equal to
+# KNOWN_USER_TOLERANCE since it's asking the same question ("is this really
+# the same face as an existing member?"), just named separately so the two
+# can be tuned independently later if needed.
+REGISTRATION_DUPLICATE_FACE_TOLERANCE = KNOWN_USER_TOLERANCE
 
 # Extra (not explicitly requested, but recommended) throttle so a *known* member
 # standing near the camera doesn't spam attendance_log with a row per second.

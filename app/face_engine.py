@@ -11,10 +11,15 @@ Flow per processed frame:
   1. Grab frame from the webcam, downscale, find faces + 128-d encodings.
   2. For each face:
        a. Compare against every ENROLLED member (registered_users).
-          -> match: log attendance (throttled) and stop.
+          -> match: log attendance (throttled, alternates ورود/خروج) and stop.
        b. Compare against faces already waiting in pending_queue that were
           seen within the last PENDING_DEDUP_WINDOW_SECONDS.
           -> match: just bump last_seen_at (anti-spam, no new row/photo).
+          NOTE: each pending entry keeps a small ROLLING WINDOW of its most
+          recent encodings (not just the first one it was created with), so
+          natural pose/expression drift while someone stands at the camera
+          doesn't cause them to "stop matching" and get re-enqueued as a
+          brand-new face.
        c. Otherwise: this is a brand-new unknown face -> crop + save a photo,
           insert a pending_queue row, and push a "new_pending" WebSocket event
           so the reception panel updates live.
@@ -61,14 +66,19 @@ class FaceEngine:
         self._known_names: list[str] = []
         self._known_encodings: list[np.ndarray] = []
 
-        self._pending_cache: list[dict] = []          # {id, encoding, last_seen}
-        self._last_attendance: dict[int, float] = {}   # user_id -> monotonic() timestamp
+        self._pending_cache: list[dict] = []  # {id, encodings: [..], last_seen}
+
+        # user_id -> {"at": datetime, "type": "in"|"out"} for the LAST logged
+        # attendance event. Loaded from the DB (not just kept in memory) so a
+        # service restart doesn't reset the in/out toggle or the cooldown.
+        self._last_attendance: dict[int, dict] = {}
 
         self.reload_known_users()
         self.reload_pending_queue()
+        self._load_last_attendance()
 
     # ------------------------------------------------------------------ #
-    # cache management (call these after any write to the two tables)
+    # cache management (call these after any write to the relevant tables)
     # ------------------------------------------------------------------ #
     def reload_known_users(self):
         with db_cursor() as cur:
@@ -85,9 +95,27 @@ class FaceEngine:
             )
             rows = cur.fetchall()
         self._pending_cache = [
-            {"id": r["id"], "encoding": blob_to_encoding(r["encoding"]), "last_seen": r["last_seen_at"]}
+            {"id": r["id"], "encodings": [blob_to_encoding(r["encoding"])], "last_seen": r["last_seen_at"]}
             for r in rows
         ]
+
+    def _load_last_attendance(self):
+        """Restore the last known in/out state per member from attendance_log,
+        so the toggle and the 5-minute cooldown survive a service restart."""
+        with db_cursor() as cur:
+            cur.execute(
+                """SELECT a.user_id, a.event_type, a.checkin_at
+                   FROM attendance_log a
+                   JOIN (
+                       SELECT user_id, MAX(id) AS max_id
+                       FROM attendance_log GROUP BY user_id
+                   ) latest ON latest.user_id = a.user_id AND latest.max_id = a.id"""
+            )
+            rows = cur.fetchall()
+        self._last_attendance = {
+            r["user_id"]: {"at": datetime.fromisoformat(r["checkin_at"]), "type": r["event_type"]}
+            for r in rows
+        }
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -156,7 +184,7 @@ class FaceEngine:
 
         pending_id = self._match_pending(encoding)
         if pending_id is not None:
-            self._touch_pending(pending_id)
+            self._touch_pending(pending_id, encoding)
             return
 
         self._enqueue_new_face(encoding, location_small, full_frame)
@@ -171,29 +199,51 @@ class FaceEngine:
         return None
 
     def _match_pending(self, encoding: np.ndarray) -> int | None:
+        """
+        Anti-spam check: is this the same unknown person already waiting in
+        the queue? Compares against EVERY recent sample kept for each pending
+        entry (see PENDING_DEDUP_MAX_SAMPLES), not just its original encoding,
+        so gradual pose/expression drift doesn't break the match.
+        """
         if not self._pending_cache:
             return None
         now = datetime.now(timezone.utc)
-        candidates = [
-            p for p in self._pending_cache
-            if (now - datetime.fromisoformat(p["last_seen"])).total_seconds()
-            <= config.PENDING_DEDUP_WINDOW_SECONDS
-        ]
-        if not candidates:
+
+        flat_ids: list[int] = []
+        flat_encodings: list[np.ndarray] = []
+        for p in self._pending_cache:
+            if (now - datetime.fromisoformat(p["last_seen"])).total_seconds() > config.PENDING_DEDUP_WINDOW_SECONDS:
+                continue
+            for sample in p["encodings"]:
+                flat_ids.append(p["id"])
+                flat_encodings.append(sample)
+
+        if not flat_encodings:
             return None
-        distances = face_recognition.face_distance([c["encoding"] for c in candidates], encoding)
+
+        distances = face_recognition.face_distance(flat_encodings, encoding)
         best_idx = int(np.argmin(distances))
         if distances[best_idx] <= config.PENDING_DEDUP_TOLERANCE:
-            return candidates[best_idx]["id"]
+            return flat_ids[best_idx]
         return None
 
-    def _touch_pending(self, pending_id: int):
+    def _touch_pending(self, pending_id: int, encoding: np.ndarray):
         now = _now_iso()
+        # also refresh the DB row's stored encoding to this latest (likely
+        # better-framed) sample, so registration later matches off the best
+        # available snapshot rather than whatever the very first glance looked like
+        blob = encoding_to_blob(encoding)
         with db_cursor(commit=True) as cur:
-            cur.execute("UPDATE pending_queue SET last_seen_at=? WHERE id=?", (now, pending_id))
+            cur.execute(
+                "UPDATE pending_queue SET last_seen_at=?, encoding=? WHERE id=?",
+                (now, blob, pending_id),
+            )
         for p in self._pending_cache:
             if p["id"] == pending_id:
                 p["last_seen"] = now
+                p["encodings"].append(encoding)
+                if len(p["encodings"]) > config.PENDING_DEDUP_MAX_SAMPLES:
+                    p["encodings"] = p["encodings"][-config.PENDING_DEDUP_MAX_SAMPLES:]
                 break
 
     def _enqueue_new_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray):
@@ -208,7 +258,7 @@ class FaceEngine:
             )
             new_id = cur.lastrowid
 
-        self._pending_cache.append({"id": new_id, "encoding": encoding, "last_seen": now})
+        self._pending_cache.append({"id": new_id, "encodings": [encoding], "last_seen": now})
 
         self._broadcast_soon({
             "event": "new_pending",
@@ -234,23 +284,38 @@ class FaceEngine:
         return path
 
     def _maybe_log_attendance(self, user_id: int):
-        now_mono = time.monotonic()
+        """
+        Throttled attendance logging that ALTERNATES between 'in' (ورود) and
+        'out' (خروج): the first time a member is seen it's an entry; if the
+        same member is seen again after ATTENDANCE_COOLDOWN_SECONDS (5 min),
+        it's logged as the opposite of their last event, and so on.
+        Sightings within the cooldown window are ignored entirely (still
+        considered "the same visit").
+        """
+        now = datetime.now(timezone.utc)
         last = self._last_attendance.get(user_id)
-        if last is not None and (now_mono - last) < config.ATTENDANCE_COOLDOWN_SECONDS:
-            return  # throttled: same member seen again too soon
-        self._last_attendance[user_id] = now_mono
+        if last is not None and (now - last["at"]).total_seconds() < config.ATTENDANCE_COOLDOWN_SECONDS:
+            return  # same visit, too soon to log another event
+
+        next_type = "out" if (last is not None and last["type"] == "in") else "in"
 
         with db_cursor(commit=True) as cur:
-            cur.execute("INSERT INTO attendance_log (user_id) VALUES (?)", (user_id,))
+            cur.execute(
+                "INSERT INTO attendance_log (user_id, event_type, checkin_at) VALUES (?, ?, ?)",
+                (user_id, next_type, now.isoformat()),
+            )
             cur.execute("SELECT full_name FROM registered_users WHERE id=?", (user_id,))
             row = cur.fetchone()
+
+        self._last_attendance[user_id] = {"at": now, "type": next_type}
 
         full_name = row["full_name"] if row else "?"
         self._broadcast_soon({
             "event": "checkin",
             "user_id": user_id,
             "full_name": full_name,
-            "checkin_at": _now_iso(),
+            "event_type": next_type,
+            "checkin_at": now.isoformat(),
         })
 
     # ------------------------------------------------------------------ #
