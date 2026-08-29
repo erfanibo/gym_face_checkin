@@ -6,7 +6,7 @@ import face_recognition
 from fastapi import APIRouter, HTTPException, Request
 
 from .. import config
-from ..database import db_cursor
+from ..database import db_cursor, generate_unique_membership_code
 from ..face_engine import blob_to_encoding
 from ..models import PendingItem, RegisterPendingRequest, RegisteredUserOut
 from ..ws_manager import manager
@@ -88,6 +88,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
         )
 
     now = datetime.now(timezone.utc).isoformat()
+    membership_code = generate_unique_membership_code()
     try:
         with db_cursor(commit=True) as cur:
             cur.execute(
@@ -95,7 +96,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
                        (membership_code, full_name, phone, encoding, photo_path, created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
-                    payload.membership_code,
+                    membership_code,
                     payload.full_name,
                     payload.phone,
                     pending_row["encoding"],
@@ -121,7 +122,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
 
     return RegisteredUserOut(
         id=new_user_id,
-        membership_code=payload.membership_code,
+        membership_code=membership_code,
         full_name=payload.full_name,
         phone=payload.phone,
         photo_url=f"/static/pending_faces/{Path(pending_row['photo_path']).name}",

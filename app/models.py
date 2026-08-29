@@ -12,7 +12,9 @@ class PendingItem(BaseModel):
 class RegisterPendingRequest(BaseModel):
     full_name: str = Field(..., min_length=2, description="نام و نام خانوادگی مشتری")
     phone: Optional[str] = Field(None, description="شماره تماس")
-    membership_code: Optional[str] = Field(None, description="کد عضویت (اختیاری، در صورت خالی بودن بعدا تخصیص داده شود)")
+    # membership_code is intentionally NOT here — it's generated automatically
+    # by the server at registration time (see routers/queue.py), never typed
+    # by the operator.
 
 
 class RegisteredUserOut(BaseModel):
@@ -27,7 +29,9 @@ class RegisteredUserOut(BaseModel):
 
 
 class AttendanceEvent(BaseModel):
+    id: int
     user_id: int
+    membership_code: Optional[str] = None
     full_name: str
     event_type: str
     checkin_at: str

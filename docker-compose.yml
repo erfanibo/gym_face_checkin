@@ -8,6 +8,8 @@ services:
     environment:
       - DATA_DIR=/app/data
       - CAMERA_INDEX=0
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
     volumes:
       - ./data:/app/data
     devices:

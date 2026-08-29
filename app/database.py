@@ -11,6 +11,7 @@ through `db_cursor()`, which serializes all reads/writes behind a single
 `threading.Lock`. For <200 users and one camera this is more than fast enough
 and avoids "database is locked" errors entirely.
 """
+import random
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -24,7 +25,7 @@ _connection: sqlite3.Connection | None = None
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS registered_users (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    membership_code     TEXT UNIQUE,
+    membership_code     TEXT UNIQUE,   -- auto-generated random number, see generate_unique_membership_code()
     full_name           TEXT NOT NULL,
     phone               TEXT,
     encoding            BLOB NOT NULL,   -- 128 x float64, see face_engine.encoding_to_blob
@@ -88,9 +89,46 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE attendance_log ADD COLUMN event_type TEXT NOT NULL DEFAULT 'in'")
 
 
+def _pick_unique_code(conn: sqlite3.Connection) -> str:
+    low = 10 ** (config.MEMBERSHIP_CODE_DIGITS - 1)
+    high = (10 ** config.MEMBERSHIP_CODE_DIGITS) - 1
+    for _ in range(50):
+        code = str(random.randint(low, high))
+        exists = conn.execute(
+            "SELECT 1 FROM registered_users WHERE membership_code=?", (code,)
+        ).fetchone()
+        if exists is None:
+            return code
+    raise RuntimeError("could not generate a unique membership code after 50 attempts")
+
+
+def generate_unique_membership_code() -> str:
+    """
+    Public entry point used at registration time. Acquires the DB lock itself
+    — call this OUTSIDE of any existing `with db_cursor(...)` block, since the
+    lock is not reentrant and this would otherwise deadlock.
+    """
+    conn = get_raw_connection()
+    with _lock:
+        return _pick_unique_code(conn)
+
+
+def _backfill_membership_codes(conn: sqlite3.Connection):
+    """
+    Membership codes used to be optional/manually typed; any member created
+    before this changed would have NULL here. Assign each of them a code once
+    at startup so every member always has one going forward.
+    """
+    rows = conn.execute("SELECT id FROM registered_users WHERE membership_code IS NULL").fetchall()
+    for row in rows:
+        code = _pick_unique_code(conn)
+        conn.execute("UPDATE registered_users SET membership_code=? WHERE id=?", (code, row["id"]))
+
+
 def init_db():
     conn = get_raw_connection()
     with _lock:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        _backfill_membership_codes(conn)
         conn.commit()

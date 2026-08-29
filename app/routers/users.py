@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -46,20 +47,43 @@ def list_users():
 
 
 @router.get("/attendance", response_model=list[AttendanceEvent])
-def list_attendance(limit: int = 50):
+def list_attendance(limit: int = 50, since_id: Optional[int] = None):
+    """
+    Two modes:
+      - default (no since_id): most recent `limit` events, newest first —
+        used by the reception panel's live feed.
+      - since_id given: events with id > since_id, OLDEST first, capped at
+        `limit` — the polling-fallback shape an external server should use:
+        remember the highest `id` you've seen, pass it back next call, and
+        you'll never miss or double-process an event even if a webhook
+        delivery was missed.
+    """
     with db_cursor() as cur:
-        cur.execute(
-            """SELECT a.user_id, u.full_name, a.event_type, a.checkin_at
-               FROM attendance_log a
-               JOIN registered_users u ON u.id = a.user_id
-               ORDER BY a.checkin_at DESC
-               LIMIT ?""",
-            (limit,),
-        )
+        if since_id is not None:
+            cur.execute(
+                """SELECT a.id, a.user_id, u.full_name, u.membership_code, a.event_type, a.checkin_at
+                   FROM attendance_log a
+                   JOIN registered_users u ON u.id = a.user_id
+                   WHERE a.id > ?
+                   ORDER BY a.id ASC
+                   LIMIT ?""",
+                (since_id, limit),
+            )
+        else:
+            cur.execute(
+                """SELECT a.id, a.user_id, u.full_name, u.membership_code, a.event_type, a.checkin_at
+                   FROM attendance_log a
+                   JOIN registered_users u ON u.id = a.user_id
+                   ORDER BY a.id DESC
+                   LIMIT ?""",
+                (limit,),
+            )
         rows = cur.fetchall()
     return [
         AttendanceEvent(
+            id=r["id"],
             user_id=r["user_id"],
+            membership_code=r["membership_code"],
             full_name=r["full_name"],
             event_type=r["event_type"],
             checkin_at=r["checkin_at"],

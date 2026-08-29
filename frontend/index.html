@@ -223,10 +223,6 @@
       <label>شماره تماس</label>
       <input id="phone" type="tel" placeholder="09xxxxxxxxx" />
     </div>
-    <div class="field">
-      <label>کد عضویت (اختیاری)</label>
-      <input id="membershipCode" type="text" placeholder="در صورت خالی بودن بعداً تخصیص یابد" />
-    </div>
     <div class="error-msg" id="modalError"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">انصراف</button>
@@ -359,7 +355,6 @@ function openModal(id) {
   document.getElementById('modalPhoto').src = item.photo_url;
   document.getElementById('fullName').value = '';
   document.getElementById('phone').value = '';
-  document.getElementById('membershipCode').value = '';
   document.getElementById('modalError').textContent = '';
   document.getElementById('overlay').classList.add('open');
 }
@@ -372,7 +367,6 @@ function closeModal() {
 async function submitRegistration() {
   const full_name = document.getElementById('fullName').value.trim();
   const phone = document.getElementById('phone').value.trim();
-  const membership_code = document.getElementById('membershipCode').value.trim();
   const errorEl = document.getElementById('modalError');
 
   if (full_name.length < 2) {
@@ -386,7 +380,6 @@ async function submitRegistration() {
     body: JSON.stringify({
       full_name,
       phone: phone || null,
-      membership_code: membership_code || null,
     }),
   });
 
@@ -396,9 +389,11 @@ async function submitRegistration() {
     return;
   }
 
+  const result = await res.json();
   pendingItems.delete(activePendingId);
   render();
   closeModal();
+  alert(`ثبت‌نام «${result.full_name}» با موفقیت انجام شد.\nکد عضویت: ${result.membership_code}`);
 }
 
 async function rejectPending(id) {

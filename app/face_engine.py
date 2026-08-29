@@ -27,6 +27,9 @@ Flow per processed frame:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 import threading
 import time
 import uuid
@@ -35,6 +38,7 @@ from datetime import datetime, timezone
 import cv2
 import numpy as np
 import face_recognition
+import httpx
 
 from . import config
 from .database import db_cursor
@@ -304,18 +308,31 @@ class FaceEngine:
                 "INSERT INTO attendance_log (user_id, event_type, checkin_at) VALUES (?, ?, ?)",
                 (user_id, next_type, now.isoformat()),
             )
-            cur.execute("SELECT full_name FROM registered_users WHERE id=?", (user_id,))
+            event_id = cur.lastrowid
+            cur.execute("SELECT full_name, membership_code FROM registered_users WHERE id=?", (user_id,))
             row = cur.fetchone()
 
         self._last_attendance[user_id] = {"at": now, "type": next_type}
 
         full_name = row["full_name"] if row else "?"
+        membership_code = row["membership_code"] if row else None
+        checkin_at_iso = now.isoformat()
+
         self._broadcast_soon({
             "event": "checkin",
             "user_id": user_id,
             "full_name": full_name,
             "event_type": next_type,
-            "checkin_at": now.isoformat(),
+            "checkin_at": checkin_at_iso,
+        })
+
+        self._send_webhook_soon({
+            "event_id": event_id,
+            "user_id": user_id,
+            "membership_code": membership_code,
+            "full_name": full_name,
+            "event_type": next_type,
+            "checkin_at": checkin_at_iso,
         })
 
     # ------------------------------------------------------------------ #
@@ -323,3 +340,41 @@ class FaceEngine:
     # ------------------------------------------------------------------ #
     def _broadcast_soon(self, message: dict):
         asyncio.run_coroutine_threadsafe(manager.broadcast(message), self._loop)
+
+    def _send_webhook_soon(self, payload: dict):
+        if not config.WEBHOOK_URL:
+            return
+        asyncio.run_coroutine_threadsafe(self._send_webhook(payload), self._loop)
+
+    async def _send_webhook(self, payload: dict):
+        """
+        POSTs an attendance event to WEBHOOK_URL, signed with WEBHOOK_SECRET
+        (if set) so the receiving server can verify it really came from this
+        system. Retries a few times with backoff if the target is briefly
+        unreachable; if it still fails, the event is NOT lost — it's already
+        safely in attendance_log and can be picked up via
+        GET /api/attendance?since_id=... as a polling fallback.
+        """
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if config.WEBHOOK_SECRET:
+            signature = hmac.new(config.WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256).hexdigest()
+            headers["X-Webhook-Signature"] = f"sha256={signature}"
+
+        delay = config.WEBHOOK_RETRY_DELAY_SECONDS
+        async with httpx.AsyncClient(timeout=config.WEBHOOK_TIMEOUT_SECONDS) as client:
+            for attempt in range(1, config.WEBHOOK_MAX_RETRIES + 1):
+                try:
+                    resp = await client.post(config.WEBHOOK_URL, content=body, headers=headers)
+                    if resp.status_code < 300:
+                        return
+                    print(f"[webhook] attempt {attempt}/{config.WEBHOOK_MAX_RETRIES} got HTTP {resp.status_code}")
+                except Exception as exc:
+                    print(f"[webhook] attempt {attempt}/{config.WEBHOOK_MAX_RETRIES} failed: {exc}")
+
+                if attempt < config.WEBHOOK_MAX_RETRIES:
+                    await asyncio.sleep(delay)
+                    delay *= 2  # exponential backoff
+
+        print(f"[webhook] giving up after {config.WEBHOOK_MAX_RETRIES} attempts for event_id={payload.get('event_id')} "
+              f"— it's still in attendance_log, safe to pick up via polling")
