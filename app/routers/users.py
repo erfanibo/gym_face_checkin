@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 from ..database import db_cursor
 from ..models import AttendanceEvent, RegisteredUserOut
+from ..ws_manager import manager
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -65,3 +66,43 @@ def list_attendance(limit: int = 50):
         )
         for r in rows
     ]
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: int, request: Request):
+    """
+    Permanently removes a member: their registration row, their attendance
+    history, and (if any) the historical pending_queue row that points at
+    them — all three are deleted in one go because attendance_log.user_id and
+    pending_queue.registered_user_id are foreign keys, and foreign_keys=ON is
+    enabled, so the parent row can't be deleted while children still
+    reference it.
+    """
+    with db_cursor() as cur:
+        cur.execute("SELECT full_name, photo_path FROM registered_users WHERE id=?", (user_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
+
+    with db_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM attendance_log WHERE user_id=?", (user_id,))
+        cur.execute("DELETE FROM pending_queue WHERE registered_user_id=?", (user_id,))
+        cur.execute("DELETE FROM registered_users WHERE id=?", (user_id,))
+
+    # best-effort cleanup of the stored photo file; a missing/locked file
+    # shouldn't fail the whole delete
+    if row["photo_path"]:
+        try:
+            Path(row["photo_path"]).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    # the camera thread must stop matching this face immediately, or the next
+    # sighting would try to INSERT an attendance row for a user_id that no
+    # longer exists (foreign key violation)
+    engine = request.app.state.face_engine
+    engine.reload_known_users()
+
+    await manager.broadcast({"event": "member_deleted", "id": user_id})
+
+    return {"ok": True, "full_name": row["full_name"]}

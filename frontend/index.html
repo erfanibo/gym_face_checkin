@@ -304,6 +304,21 @@ async function loadMembers() {
   renderMembers();
 }
 
+async function deleteMember(id) {
+  const member = members.find(m => m.id === id);
+  const name = member ? member.full_name : 'این عضو';
+  if (!confirm(`آیا از حذف «${name}» مطمئن هستید؟ این کار قابل بازگشت نیست و تاریخچه‌ی تردد او هم حذف می‌شود.`)) {
+    return;
+  }
+  const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    alert('حذف انجام نشد. دوباره تلاش کنید.');
+    return;
+  }
+  members = members.filter(m => m.id !== id);
+  renderMembers();
+}
+
 function statusBadge(member) {
   if (!member.last_event_type) return '<span class="member-status status-none">هنوز تردد ندارد</span>';
   if (member.last_event_type === 'in') return '<span class="member-status status-in">داخل باشگاه</span>';
@@ -332,6 +347,7 @@ function renderMembers() {
         </div>
       </div>
       ${statusBadge(m)}
+      <button class="btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
     </div>
   `).join('');
 }
@@ -428,6 +444,9 @@ function connectWs() {
         member.last_checkin_at = msg.checkin_at;
         if (activeTab === 'members') renderMembers();
       }
+    } else if (msg.event === 'member_deleted') {
+      members = members.filter(m => m.id !== msg.id);
+      if (activeTab === 'members') renderMembers();
     }
   };
 }
