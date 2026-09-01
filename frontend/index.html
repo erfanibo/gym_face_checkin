@@ -132,6 +132,21 @@
   .status-out { background: #3a2430; color: var(--warn); }
   .status-none { background: var(--panel-2); color: var(--muted); }
 
+  .member-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+  .toast-container {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 100; display: flex; flex-direction: column; gap: 8px;
+    width: 100%; max-width: 420px; padding: 0 16px;
+  }
+  .toast {
+    background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 12px 18px; font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35); animation: toast-in .2s ease-out;
+  }
+  .toast b { color: var(--accent); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
   .feed { margin-top: 34px; }
   .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
   .feed-item {
@@ -172,6 +187,7 @@
 </style>
 </head>
 <body>
+<div class="toast-container" id="toastContainer"></div>
 
 <header>
   <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
@@ -231,6 +247,25 @@
   </div>
 </div>
 
+<div class="overlay" id="editOverlay">
+  <div class="modal">
+    <h3>ویرایش اطلاعات عضو</h3>
+    <div class="field">
+      <label>نام و نام خانوادگی</label>
+      <input id="editFullName" type="text" />
+    </div>
+    <div class="field">
+      <label>شماره تماس</label>
+      <input id="editPhone" type="tel" />
+    </div>
+    <div class="error-msg" id="editModalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeEditModal()">انصراف</button>
+      <button class="btn-primary" onclick="submitEdit()">ذخیره تغییرات</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_BASE = '';
 let activePendingId = null;
@@ -245,6 +280,15 @@ function timeAgo(iso) {
   if (minutes < 60) return `${minutes} دقیقه پیش`;
   const hours = Math.floor(minutes / 60);
   return `${hours} ساعت پیش`;
+}
+
+function showToast(html, duration = 7000) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = html;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), duration);
 }
 
 function showTab(name) {
@@ -315,6 +359,75 @@ async function deleteMember(id) {
   renderMembers();
 }
 
+async function setAttendance(id, eventType) {
+  const res = await fetch(`${API_BASE}/api/users/${id}/attendance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_type: eventType }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(err.detail || 'ثبت تردد انجام نشد.');
+    return;
+  }
+  const result = await res.json();
+  const member = members.find(m => m.id === id);
+  if (member) {
+    member.last_event_type = result.event_type;
+    member.last_checkin_at = result.checkin_at;
+  }
+  renderMembers();
+}
+
+let activeEditId = null;
+
+function openEditModal(id) {
+  const member = members.find(m => m.id === id);
+  if (!member) return;
+  activeEditId = id;
+  document.getElementById('editFullName').value = member.full_name;
+  document.getElementById('editPhone').value = member.phone || '';
+  document.getElementById('editModalError').textContent = '';
+  document.getElementById('editOverlay').classList.add('open');
+}
+
+function closeEditModal() {
+  activeEditId = null;
+  document.getElementById('editOverlay').classList.remove('open');
+}
+
+async function submitEdit() {
+  const full_name = document.getElementById('editFullName').value.trim();
+  const phone = document.getElementById('editPhone').value.trim();
+  const errorEl = document.getElementById('editModalError');
+
+  if (full_name.length < 2) {
+    errorEl.textContent = 'لطفاً نام کامل را وارد کنید.';
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/api/users/${activeEditId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ full_name, phone: phone || null }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = err.detail || 'ویرایش انجام نشد.';
+    return;
+  }
+
+  const result = await res.json();
+  const member = members.find(m => m.id === activeEditId);
+  if (member) {
+    member.full_name = result.full_name;
+    member.phone = result.phone;
+  }
+  renderMembers();
+  closeEditModal();
+}
+
 function statusBadge(member) {
   if (!member.last_event_type) return '<span class="member-status status-none">هنوز تردد ندارد</span>';
   if (member.last_event_type === 'in') return '<span class="member-status status-in">داخل باشگاه</span>';
@@ -343,7 +456,12 @@ function renderMembers() {
         </div>
       </div>
       ${statusBadge(m)}
-      <button class="btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
+      <div class="member-actions">
+        <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
+        <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
+        <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
+        <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
+      </div>
     </div>
   `).join('');
 }
@@ -393,7 +511,7 @@ async function submitRegistration() {
   pendingItems.delete(activePendingId);
   render();
   closeModal();
-  alert(`ثبت‌نام «${result.full_name}» با موفقیت انجام شد.\nکد عضویت: ${result.membership_code}`);
+  showToast(`ثبت‌نام <b>${result.full_name}</b> با موفقیت انجام شد — کد عضویت: <b>${result.membership_code}</b>`);
 }
 
 async function rejectPending(id) {
@@ -442,6 +560,13 @@ function connectWs() {
     } else if (msg.event === 'member_deleted') {
       members = members.filter(m => m.id !== msg.id);
       if (activeTab === 'members') renderMembers();
+    } else if (msg.event === 'member_updated') {
+      const member = members.find(m => m.id === msg.id);
+      if (member) {
+        member.full_name = msg.full_name;
+        member.phone = msg.phone;
+        if (activeTab === 'members') renderMembers();
+      }
     }
   };
 }

@@ -4,46 +4,45 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from ..database import db_cursor
-from ..models import AttendanceEvent, RegisteredUserOut
+from ..models import AttendanceEvent, ManualAttendanceRequest, RegisteredUserOut, UpdateUserRequest
 from ..ws_manager import manager
 
 router = APIRouter(prefix="/api", tags=["users"])
+
+_USER_WITH_ATTENDANCE_SELECT = """
+    SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type
+    FROM registered_users u
+    LEFT JOIN (
+        SELECT a1.user_id, a1.checkin_at, a1.event_type
+        FROM attendance_log a1
+        JOIN (
+            SELECT user_id, MAX(id) AS max_id
+            FROM attendance_log GROUP BY user_id
+        ) a2 ON a2.user_id = a1.user_id AND a2.max_id = a1.id
+    ) la ON la.user_id = u.id
+"""
+
+
+def _row_to_user_out(r) -> RegisteredUserOut:
+    photo_url = f"/static/pending_faces/{Path(r['photo_path']).name}" if r["photo_path"] else None
+    return RegisteredUserOut(
+        id=r["id"],
+        membership_code=r["membership_code"],
+        full_name=r["full_name"],
+        phone=r["phone"],
+        photo_url=photo_url,
+        created_at=r["created_at"],
+        last_checkin_at=r["last_checkin_at"],
+        last_event_type=r["last_event_type"],
+    )
 
 
 @router.get("/users", response_model=list[RegisteredUserOut])
 def list_users():
     with db_cursor() as cur:
-        cur.execute(
-            """SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type
-               FROM registered_users u
-               LEFT JOIN (
-                   SELECT a1.user_id, a1.checkin_at, a1.event_type
-                   FROM attendance_log a1
-                   JOIN (
-                       SELECT user_id, MAX(id) AS max_id
-                       FROM attendance_log GROUP BY user_id
-                   ) a2 ON a2.user_id = a1.user_id AND a2.max_id = a1.id
-               ) la ON la.user_id = u.id
-               ORDER BY u.created_at DESC"""
-        )
+        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " ORDER BY u.created_at DESC")
         rows = cur.fetchall()
-
-    result = []
-    for r in rows:
-        photo_url = f"/static/pending_faces/{Path(r['photo_path']).name}" if r["photo_path"] else None
-        result.append(
-            RegisteredUserOut(
-                id=r["id"],
-                membership_code=r["membership_code"],
-                full_name=r["full_name"],
-                phone=r["phone"],
-                photo_url=photo_url,
-                created_at=r["created_at"],
-                last_checkin_at=r["last_checkin_at"],
-                last_event_type=r["last_event_type"],
-            )
-        )
-    return result
+    return [_row_to_user_out(r) for r in rows]
 
 
 @router.get("/attendance", response_model=list[AttendanceEvent])
@@ -130,3 +129,63 @@ async def delete_user(user_id: int, request: Request):
     await manager.broadcast({"event": "member_deleted", "id": user_id})
 
     return {"ok": True, "full_name": row["full_name"]}
+
+
+@router.patch("/users/{user_id}", response_model=RegisteredUserOut)
+async def update_user(user_id: int, payload: UpdateUserRequest, request: Request):
+    """Edit a member's name and/or phone. Their face data is untouched."""
+    with db_cursor() as cur:
+        cur.execute("SELECT full_name, phone FROM registered_users WHERE id=?", (user_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
+
+    new_name = payload.full_name.strip() if payload.full_name is not None else row["full_name"]
+    new_phone = payload.phone if payload.phone is not None else row["phone"]
+
+    with db_cursor(commit=True) as cur:
+        cur.execute("UPDATE registered_users SET full_name=?, phone=? WHERE id=?", (new_name, new_phone, user_id))
+
+    # the camera's known-face cache keeps a copy of each member's name for
+    # the live feed/webhook payloads, so it needs to see the new name too
+    engine = request.app.state.face_engine
+    engine.reload_known_users()
+
+    await manager.broadcast({"event": "member_updated", "id": user_id, "full_name": new_name, "phone": new_phone})
+
+    with db_cursor() as cur:
+        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        updated_row = cur.fetchone()
+    return _row_to_user_out(updated_row)
+
+
+@router.post("/users/{user_id}/attendance", response_model=AttendanceEvent)
+async def set_attendance(user_id: int, payload: ManualAttendanceRequest, request: Request):
+    """
+    Manually record an entry/exit for a member from the reception panel —
+    for correcting a missed camera detection, or logging someone who came in
+    through a side door, etc. Not throttled by the usual 5-minute cooldown
+    and doesn't require alternating in/out: the operator is always right.
+    """
+    with db_cursor() as cur:
+        cur.execute("SELECT 1 FROM registered_users WHERE id=?", (user_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
+
+    if payload.event_type is not None and payload.event_type not in ("in", "out"):
+        raise HTTPException(400, "event_type باید 'in' یا 'out' باشد")
+
+    engine = request.app.state.face_engine
+    try:
+        result = engine.log_manual_attendance(user_id, payload.event_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    return AttendanceEvent(
+        id=result["event_id"],
+        user_id=user_id,
+        membership_code=result["membership_code"],
+        full_name=result["full_name"],
+        event_type=result["event_type"],
+        checkin_at=result["checkin_at"],
+    )

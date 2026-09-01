@@ -28,6 +28,17 @@ class RegisteredUserOut(BaseModel):
     last_event_type: Optional[str] = None  # 'in' | 'out' | None (هرگز تردد ثبت نشده)
 
 
+class UpdateUserRequest(BaseModel):
+    full_name: Optional[str] = Field(None, min_length=2, description="نام جدید (اختیاری)")
+    phone: Optional[str] = Field(None, description="شماره تماس جدید (اختیاری)")
+
+
+class ManualAttendanceRequest(BaseModel):
+    event_type: Optional[str] = Field(
+        None, description="'in' یا 'out'؛ اگر خالی باشد، از وضعیت آخر toggle می‌شود"
+    )
+
+
 class AttendanceEvent(BaseModel):
     id: int
     user_id: int

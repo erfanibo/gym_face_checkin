@@ -289,12 +289,11 @@ class FaceEngine:
 
     def _maybe_log_attendance(self, user_id: int):
         """
-        Throttled attendance logging that ALTERNATES between 'in' (ورود) and
-        'out' (خروج): the first time a member is seen it's an entry; if the
-        same member is seen again after ATTENDANCE_COOLDOWN_SECONDS (5 min),
-        it's logged as the opposite of their last event, and so on.
-        Sightings within the cooldown window are ignored entirely (still
-        considered "the same visit").
+        CAMERA path — throttled. Alternates between 'in' (ورود) و 'out' (خروج):
+        the first time a member is seen it's an entry; if the same member is
+        seen again after ATTENDANCE_COOLDOWN_SECONDS (5 min), it's logged as
+        the opposite of their last event. Sightings within the cooldown
+        window are ignored entirely (still considered "the same visit").
         """
         now = datetime.now(timezone.utc)
         last = self._last_attendance.get(user_id)
@@ -302,17 +301,40 @@ class FaceEngine:
             return  # same visit, too soon to log another event
 
         next_type = "out" if (last is not None and last["type"] == "in") else "in"
+        self._record_attendance(user_id, next_type)
+
+    def log_manual_attendance(self, user_id: int, event_type: str | None = None) -> dict:
+        """
+        ADMIN path — used by the reception panel's "ثبت ورود" / "ثبت خروج"
+        buttons. Unlike the camera path, this is NOT throttled by the cooldown
+        and does NOT require alternation: an operator correcting a mistake
+        (e.g. the camera missed someone's exit) needs to be able to force the
+        correct state regardless of what was last recorded. If event_type is
+        omitted, it toggles from the last known state instead (kept for API
+        flexibility, though the panel's two explicit buttons never rely on this).
+        """
+        if event_type is None:
+            last = self._last_attendance.get(user_id)
+            event_type = "out" if (last is not None and last["type"] == "in") else "in"
+        if event_type not in ("in", "out"):
+            raise ValueError("event_type must be 'in' or 'out'")
+        return self._record_attendance(user_id, event_type)
+
+    def _record_attendance(self, user_id: int, event_type: str) -> dict:
+        """Shared by both paths above: writes the row, refreshes the in-memory
+        toggle state, and fires the WebSocket broadcast + webhook."""
+        now = datetime.now(timezone.utc)
 
         with db_cursor(commit=True) as cur:
             cur.execute(
                 "INSERT INTO attendance_log (user_id, event_type, checkin_at) VALUES (?, ?, ?)",
-                (user_id, next_type, now.isoformat()),
+                (user_id, event_type, now.isoformat()),
             )
             event_id = cur.lastrowid
             cur.execute("SELECT full_name, membership_code FROM registered_users WHERE id=?", (user_id,))
             row = cur.fetchone()
 
-        self._last_attendance[user_id] = {"at": now, "type": next_type}
+        self._last_attendance[user_id] = {"at": now, "type": event_type}
 
         full_name = row["full_name"] if row else "?"
         membership_code = row["membership_code"] if row else None
@@ -322,7 +344,7 @@ class FaceEngine:
             "event": "checkin",
             "user_id": user_id,
             "full_name": full_name,
-            "event_type": next_type,
+            "event_type": event_type,
             "checkin_at": checkin_at_iso,
         })
 
@@ -331,9 +353,17 @@ class FaceEngine:
             "user_id": user_id,
             "membership_code": membership_code,
             "full_name": full_name,
-            "event_type": next_type,
+            "event_type": event_type,
             "checkin_at": checkin_at_iso,
         })
+
+        return {
+            "event_id": event_id,
+            "event_type": event_type,
+            "checkin_at": checkin_at_iso,
+            "full_name": full_name,
+            "membership_code": membership_code,
+        }
 
     # ------------------------------------------------------------------ #
     # bridge: background thread -> asyncio event loop
