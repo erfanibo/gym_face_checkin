@@ -7,8 +7,14 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .. import config
 from ..database import db_cursor, generate_unique_membership_code
-from ..face_engine import blob_to_encoding
-from ..models import PendingItem, RegisterPendingRequest, RegisteredUserOut
+from ..face_engine import add_face_sample, blob_to_encoding
+from ..models import (
+    AssignPendingRequest,
+    AssignPendingResponse,
+    PendingItem,
+    RegisterPendingRequest,
+    RegisteredUserOut,
+)
 from ..ws_manager import manager
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
@@ -25,12 +31,19 @@ def _pending_row_to_item(row) -> PendingItem:
 
 def _find_duplicate_registered_face(pending_encoding: np.ndarray):
     """
-    Checks the face being registered against every already-registered member.
+    Checks the face being registered against EVERY sample of EVERY
+    already-registered member (member_face_samples, not just each member's
+    original single encoding -- a member registered from one angle should
+    still be caught as a duplicate even if a later sample looks different).
     Returns (existing_user_id, existing_full_name) if it's close enough to be
     considered the same physical person, otherwise None.
     """
     with db_cursor() as cur:
-        cur.execute("SELECT id, full_name, encoding FROM registered_users")
+        cur.execute(
+            """SELECT s.user_id, s.encoding, u.full_name
+               FROM member_face_samples s
+               JOIN registered_users u ON u.id = s.user_id"""
+        )
         rows = cur.fetchall()
     if not rows:
         return None
@@ -40,7 +53,7 @@ def _find_duplicate_registered_face(pending_encoding: np.ndarray):
     best_idx = int(np.argmin(distances))
     if distances[best_idx] <= config.REGISTRATION_DUPLICATE_FACE_TOLERANCE:
         row = rows[best_idx]
-        return row["id"], row["full_name"]
+        return row["user_id"], row["full_name"]
     return None
 
 
@@ -113,6 +126,9 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
         # most likely a UNIQUE constraint violation on membership_code
         raise HTTPException(400, f"ثبت‌نام ناموفق بود: {exc}")
 
+    # the pending face becomes this member's first recognition sample
+    add_face_sample(new_user_id, pending_encoding, source="registration")
+
     # keep the in-memory recognition caches in sync with the DB
     engine = request.app.state.face_engine
     engine.reload_known_users()
@@ -127,6 +143,60 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
         phone=payload.phone,
         photo_url=f"/static/pending_faces/{Path(pending_row['photo_path']).name}",
         created_at=now,
+    )
+
+
+@router.post("/{pending_id}/assign", response_model=AssignPendingResponse)
+async def assign_pending_to_member(pending_id: int, payload: AssignPendingRequest, request: Request):
+    """
+    Operator says "this pending face isn't a new person -- it's an existing
+    member, just caught from an angle/lighting the system doesn't recognize
+    yet." Unlike /register, this does NOT create a new registered_users row:
+    it adds the pending face as one more recognition sample (member_face_
+    samples) for the member the operator picked, then resolves the queue
+    entry exactly like a normal registration would.
+
+    Deliberately manual (operator picks the member, one click at a time)
+    rather than automatic: if the system silently "learned" new samples on
+    its own whenever it *thought* it recognized someone, a single wrong
+    match would reinforce itself into more wrong matches. Requiring a human
+    to confirm each new sample keeps that risk out of the loop.
+    """
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM pending_queue WHERE id=? AND status='pending'", (pending_id,))
+        pending_row = cur.fetchone()
+    if pending_row is None:
+        raise HTTPException(404, "این مورد در صف انتظار پیدا نشد یا قبلاً پردازش شده است")
+
+    with db_cursor() as cur:
+        cur.execute("SELECT id, full_name FROM registered_users WHERE id=?", (payload.user_id,))
+        member_row = cur.fetchone()
+    if member_row is None:
+        raise HTTPException(404, "عضوی با این شناسه پیدا نشد")
+
+    pending_encoding = blob_to_encoding(pending_row["encoding"])
+    add_face_sample(payload.user_id, pending_encoding, source="assigned")
+
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE pending_queue SET status='registered', registered_user_id=? WHERE id=?",
+            (payload.user_id, pending_id),
+        )
+        cur.execute("SELECT COUNT(*) AS n FROM member_face_samples WHERE user_id=?", (payload.user_id,))
+        sample_count = cur.fetchone()["n"]
+
+    # keep the in-memory recognition caches in sync with the DB
+    engine = request.app.state.face_engine
+    engine.reload_known_users()
+    engine.reload_pending_queue()
+
+    await manager.broadcast({"event": "pending_resolved", "id": pending_id})
+
+    return AssignPendingResponse(
+        ok=True,
+        user_id=payload.user_id,
+        full_name=member_row["full_name"],
+        sample_count=sample_count,
     )
 
 

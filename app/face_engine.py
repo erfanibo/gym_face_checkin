@@ -58,6 +58,40 @@ def blob_to_encoding(blob: bytes) -> np.ndarray:
     return np.frombuffer(blob, dtype=np.float64)
 
 
+def add_face_sample(user_id: int, encoding: np.ndarray, source: str = "assigned") -> None:
+    """
+    Adds one more recognition sample for an EXISTING member. Used both right
+    after registration (source='registration', one call from
+    routers/queue.py:register_pending) and whenever an operator later says
+    "this pending-queue face is actually this same member, just a different
+    angle/light" (source='assigned', routers/queue.py:assign_pending_to_member).
+
+    Caps each member at config.MAX_FACE_SAMPLES_PER_MEMBER samples: once the
+    cap is hit, the OLDEST sample is dropped to make room for the new one.
+    This keeps the per-frame comparison cost bounded (see FaceEngine.
+    _match_known) and naturally rotates a member's profile toward their most
+    recent appearances instead of growing forever.
+
+    Callers are responsible for calling FaceEngine.reload_known_users()
+    afterwards so the background camera thread's in-memory cache picks up
+    the new sample immediately, rather than waiting for the next full reload.
+    """
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO member_face_samples (user_id, encoding, source, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, encoding_to_blob(encoding), source, _now_iso()),
+        )
+        cur.execute(
+            "SELECT id FROM member_face_samples WHERE user_id=? ORDER BY id ASC",
+            (user_id,),
+        )
+        sample_ids = [r["id"] for r in cur.fetchall()]
+        overflow = len(sample_ids) - config.MAX_FACE_SAMPLES_PER_MEMBER
+        if overflow > 0:
+            oldest = [(i,) for i in sample_ids[:overflow]]
+            cur.executemany("DELETE FROM member_face_samples WHERE id=?", oldest)
+
+
 class FaceEngine:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -65,10 +99,15 @@ class FaceEngine:
         self._running = False
 
         # in-memory caches mirrored from SQLite, refreshed on demand so the
-        # hot per-frame loop never has to hit the DB just to compare vectors
-        self._known_ids: list[int] = []
-        self._known_names: list[str] = []
-        self._known_encodings: list[np.ndarray] = []
+        # hot per-frame loop never has to hit the DB just to compare vectors.
+        # Each member can have MULTIPLE samples (member_face_samples table),
+        # so these are flat, parallel lists: _known_sample_user_ids[i] is the
+        # owner of _known_sample_encodings[i]. A member with 8 samples simply
+        # appears 8 times, once per sample -- face_distance() compares the
+        # incoming frame against all of them at once and we take whichever
+        # single sample is closest, from whichever member.
+        self._known_sample_user_ids: list[int] = []
+        self._known_sample_encodings: list[np.ndarray] = []
 
         self._pending_cache: list[dict] = []  # {id, encodings: [..], last_seen}
 
@@ -85,12 +124,19 @@ class FaceEngine:
     # cache management (call these after any write to the relevant tables)
     # ------------------------------------------------------------------ #
     def reload_known_users(self):
+        """
+        Loads EVERY sample for EVERY member (not one row per member anymore --
+        see member_face_samples). Names aren't cached here: the hot path only
+        ever needs a user_id (see _match_known), and every place that reports
+        a name back to the operator/webhook already re-reads it fresh from
+        registered_users (e.g. _record_attendance), so there's no separate
+        name cache to keep in sync here.
+        """
         with db_cursor() as cur:
-            cur.execute("SELECT id, full_name, encoding FROM registered_users")
+            cur.execute("SELECT user_id, encoding FROM member_face_samples")
             rows = cur.fetchall()
-        self._known_ids = [r["id"] for r in rows]
-        self._known_names = [r["full_name"] for r in rows]
-        self._known_encodings = [blob_to_encoding(r["encoding"]) for r in rows]
+        self._known_sample_user_ids = [r["user_id"] for r in rows]
+        self._known_sample_encodings = [blob_to_encoding(r["encoding"]) for r in rows]
 
     def reload_pending_queue(self):
         with db_cursor() as cur:
@@ -194,12 +240,18 @@ class FaceEngine:
         self._enqueue_new_face(encoding, location_small, full_frame)
 
     def _match_known(self, encoding: np.ndarray) -> int | None:
-        if not self._known_encodings:
+        """
+        Compares against every sample of every member at once (a few thousand
+        vector comparisons even at ~200 members x 8 samples -- negligible
+        with numpy, well under the per-frame budget) and returns whichever
+        member owns the single closest sample, provided it's within tolerance.
+        """
+        if not self._known_sample_encodings:
             return None
-        distances = face_recognition.face_distance(self._known_encodings, encoding)
+        distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
         best_idx = int(np.argmin(distances))
         if distances[best_idx] <= config.KNOWN_USER_TOLERANCE:
-            return self._known_ids[best_idx]
+            return self._known_sample_user_ids[best_idx]
         return None
 
     def _match_pending(self, encoding: np.ndarray) -> int | None:

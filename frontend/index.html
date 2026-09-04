@@ -84,7 +84,9 @@
   }
   .card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
   .waited { font-size: 12px; color: var(--muted); }
-  .card-actions { display: flex; gap: 8px; }
+  .card-actions { display: flex; flex-direction: column; gap: 8px; }
+  .card-actions-row { display: flex; gap: 8px; }
+  .card-actions-row > button { flex: 1; }
   button {
     font-family: inherit; border: none; border-radius: 9px;
     padding: 8px 10px; font-size: 13px; font-weight: 600;
@@ -266,6 +268,22 @@
   </div>
 </div>
 
+<div class="overlay" id="assignOverlay">
+  <div class="modal" style="max-width:420px;">
+    <img id="assignModalPhoto" src="" alt="عکس در صف انتظار" />
+    <h3>این چهره متعلق به کدام عضو است؟</h3>
+    <div class="field">
+      <input id="assignSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderAssignList()" />
+    </div>
+    <div id="assignList" class="member-list" style="max-height:340px; overflow-y:auto;"></div>
+    <div id="assignEmptyState" class="empty" style="display:none; padding:24px;">عضوی پیدا نشد.</div>
+    <div class="error-msg" id="assignModalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeAssignModal()">انصراف</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_BASE = '';
 let activePendingId = null;
@@ -313,8 +331,11 @@ function render() {
       <div class="card-body">
         <div class="waited">⏱ ${timeAgo(item.first_seen_at)}</div>
         <div class="card-actions">
-          <button class="btn-primary" onclick="openModal(${item.id})">ثبت‌نام</button>
-          <button class="btn-ghost" onclick="rejectPending(${item.id})">رد</button>
+          <button class="btn-primary" onclick="openModal(${item.id})">ثبت‌نام جدید</button>
+          <div class="card-actions-row">
+            <button class="btn-secondary btn-sm" onclick="openAssignModal(${item.id})">عضو موجود است</button>
+            <button class="btn-ghost btn-sm" onclick="rejectPending(${item.id})">رد</button>
+          </div>
         </div>
       </div>
     </div>
@@ -518,6 +539,70 @@ async function rejectPending(id) {
   await fetch(`${API_BASE}/api/queue/${id}`, { method: 'DELETE' });
   pendingItems.delete(id);
   render();
+}
+
+// ---- "این چهره متعلق به عضو موجود است" flow ----
+let activeAssignPendingId = null;
+
+async function openAssignModal(id) {
+  const item = pendingItems.get(id);
+  if (!item) return;
+  activeAssignPendingId = id;
+  document.getElementById('assignModalPhoto').src = item.photo_url;
+  document.getElementById('assignSearch').value = '';
+  document.getElementById('assignModalError').textContent = '';
+  document.getElementById('assignOverlay').classList.add('open');
+  await loadMembers(); // fresh list, so search is accurate even if this is the first time opening
+  renderAssignList();
+}
+
+function closeAssignModal() {
+  activeAssignPendingId = null;
+  document.getElementById('assignOverlay').classList.remove('open');
+}
+
+function renderAssignList() {
+  const query = (document.getElementById('assignSearch').value || '').trim().toLowerCase();
+  const filtered = members.filter(m => {
+    if (!query) return true;
+    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
+  });
+
+  document.getElementById('assignEmptyState').style.display = filtered.length ? 'none' : 'block';
+
+  const list = document.getElementById('assignList');
+  list.innerHTML = filtered.map(m => `
+    <div class="member-row" style="cursor:pointer" onclick="submitAssign(${m.id})">
+      <img src="${m.photo_url || ''}" alt="${m.full_name}" onerror="this.style.visibility='hidden'" />
+      <div class="member-info">
+        <div class="member-name">${m.full_name}</div>
+        <div class="member-meta">${m.membership_code ? `کد: ${m.membership_code} · ` : ''}${m.phone || 'بدون شماره تماس'}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function submitAssign(userId) {
+  const errorEl = document.getElementById('assignModalError');
+  errorEl.textContent = '';
+
+  const res = await fetch(`${API_BASE}/api/queue/${activeAssignPendingId}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = err.detail || 'خطا در ثبت. دوباره تلاش کنید.';
+    return;
+  }
+
+  const result = await res.json();
+  pendingItems.delete(activeAssignPendingId);
+  render();
+  closeAssignModal();
+  showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
 }
 
 // re-render "N seconds ago" labels periodically

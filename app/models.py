@@ -17,6 +17,17 @@ class RegisterPendingRequest(BaseModel):
     # by the operator.
 
 
+class AssignPendingRequest(BaseModel):
+    user_id: int = Field(..., description="شناسه‌ی عضو موجودی که این چهره در صف انتظار متعلق به اوست")
+
+
+class AssignPendingResponse(BaseModel):
+    ok: bool
+    user_id: int
+    full_name: str
+    sample_count: int
+
+
 class RegisteredUserOut(BaseModel):
     id: int
     membership_code: Optional[str]

@@ -50,8 +50,22 @@ CREATE TABLE IF NOT EXISTS attendance_log (
     checkin_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_pending_status   ON pending_queue(status);
-CREATE INDEX IF NOT EXISTS idx_attendance_user  ON attendance_log(user_id);
+-- Multiple face vectors per member (angle/lighting variants), so recognition
+-- doesn't depend on the single snapshot taken at signup. Populated either at
+-- registration time (source='registration') or later when an operator
+-- manually links a pending-queue face to this member (source='assigned', see
+-- routers/queue.py assign_pending_to_member + face_engine.add_face_sample).
+CREATE TABLE IF NOT EXISTS member_face_samples (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES registered_users(id),
+    encoding    BLOB NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'registration',  -- 'registration' | 'assigned'
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_status    ON pending_queue(status);
+CREATE INDEX IF NOT EXISTS idx_attendance_user   ON attendance_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_face_samples_user ON member_face_samples(user_id);
 """
 
 
@@ -87,6 +101,27 @@ def _migrate(conn: sqlite3.Connection):
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(attendance_log)")}
     if "event_type" not in cols:
         conn.execute("ALTER TABLE attendance_log ADD COLUMN event_type TEXT NOT NULL DEFAULT 'in'")
+
+
+def _backfill_face_samples(conn: sqlite3.Connection):
+    """
+    member_face_samples was introduced after members had a single encoding
+    column. Any member that doesn't have at least one row there yet (every
+    member registered before this feature existed) gets their original
+    registered_users.encoding copied in as their first sample. Idempotent —
+    only touches members with zero samples, safe to run on every startup,
+    never deletes or overwrites anything.
+    """
+    rows = conn.execute(
+        """SELECT u.id, u.encoding FROM registered_users u
+           LEFT JOIN member_face_samples s ON s.user_id = u.id
+           WHERE s.id IS NULL"""
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            "INSERT INTO member_face_samples (user_id, encoding, source) VALUES (?, ?, 'registration')",
+            (row["id"], row["encoding"]),
+        )
 
 
 def _pick_unique_code(conn: sqlite3.Connection) -> str:
@@ -131,4 +166,5 @@ def init_db():
         conn.executescript(SCHEMA)
         _migrate(conn)
         _backfill_membership_codes(conn)
+        _backfill_face_samples(conn)
         conn.commit()
