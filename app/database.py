@@ -92,6 +92,38 @@ def get_raw_connection() -> sqlite3.Connection:
     return _connection
 
 
+def close_connection():
+    """
+    Closes and drops the shared connection so the underlying .db file can be
+    safely replaced on disk (used by routers/backup.py during a restore).
+    The next get_raw_connection() call transparently reopens a fresh
+    connection against whatever file is at config.DB_PATH at that point.
+    """
+    global _connection
+    with _lock:
+        if _connection is not None:
+            _connection.close()
+            _connection = None
+
+
+def backup_database_to(dest_path):
+    """
+    Snapshots the live database into a new file at dest_path using sqlite3's
+    built-in online backup API (Connection.backup), NOT a plain file copy --
+    a plain `cp` of a SQLite file that's being written to concurrently (the
+    camera thread writes recognition_log/attendance_log constantly) can
+    produce a torn, corrupt copy. `backup()` takes the same lock db_cursor()
+    uses, so it can't run concurrently with an in-progress write either.
+    """
+    conn = get_raw_connection()
+    with _lock:
+        dest_conn = sqlite3.connect(str(dest_path))
+        try:
+            conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+
+
 @contextmanager
 def db_cursor(commit: bool = False):
     """Use as:  with db_cursor(commit=True) as cur: cur.execute(...)"""

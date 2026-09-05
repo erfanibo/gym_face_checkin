@@ -174,6 +174,21 @@ class FaceEngine:
             for r in rows
         }
 
+    def reload_all(self):
+        """
+        Public entry point used by routers/backup.py right after a database
+        restore swaps out the .db file from under this running process: every
+        in-memory cache this class keeps (known-face samples, pending-queue
+        samples, last in/out attendance state) gets rebuilt from whatever is
+        now in the (freshly restored) database, and the small per-member
+        recognition-log debounce timer is cleared since it no longer reflects
+        reality anyway.
+        """
+        self.reload_known_users()
+        self.reload_pending_queue()
+        self._load_last_attendance()
+        self._last_recognition_log = {}
+
     # ------------------------------------------------------------------ #
     # lifecycle
     # ------------------------------------------------------------------ #

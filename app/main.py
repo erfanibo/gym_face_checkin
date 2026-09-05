@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config
 from .database import init_db
 from .face_engine import FaceEngine
-from .routers import logs, queue, users
+from .routers import backup, logs, queue, users
 from .ws_manager import manager
 
 
@@ -43,6 +43,7 @@ app.mount("/panel", StaticFiles(directory=str(config.FRONTEND_DIR), html=True), 
 app.include_router(queue.router)
 app.include_router(users.router)
 app.include_router(logs.router)
+app.include_router(backup.router)
 
 
 @app.websocket("/ws/queue")

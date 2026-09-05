@@ -160,6 +160,11 @@
   .feed-item.log-item { animation: appear .2s ease-out; }
   .feed-item.log-item .dist { color: var(--muted); font-size: 11px; }
 
+  .settings-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
+  .settings-divider { border-top: 1px solid var(--line); margin: 30px 0; }
+  .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .settings-actions button { padding: 10px 18px; }
+
   /* modal */
   .overlay {
     position: fixed; inset: 0; background: rgba(6,8,11,0.65);
@@ -195,16 +200,14 @@
 
 <header>
   <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
-  <div style="display:flex; align-items:center; gap:16px;">
-    <button class="btn-secondary btn-sm" onclick="openLogModal()">🪵 لاگ زنده</button>
-    <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
-  </div>
+  <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
 </header>
 
 <main>
   <div class="tabs">
     <button class="tab-btn active" id="tabBtnQueue" onclick="showTab('queue')">صف انتظار</button>
     <button class="tab-btn" id="tabBtnMembers" onclick="showTab('members')">اعضا</button>
+    <button class="tab-btn" id="tabBtnSettings" onclick="showTab('settings')">تنظیمات</button>
   </div>
 
   <div class="tab-panel active" id="tabQueue">
@@ -231,6 +234,24 @@
     </div>
     <div id="memberList" class="member-list"></div>
     <div id="memberEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
+  </div>
+
+  <div class="tab-panel" id="tabSettings">
+    <div class="section-title"><h2>🪵 لاگ زنده</h2></div>
+    <p class="settings-hint">هر بار دوربین یک عضو را تشخیص دهد، بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله اینجا یک خط ثبت می‌شود.</p>
+    <div id="recognitionLogList" class="feed-list" style="max-height:280px;"></div>
+    <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
+
+    <div class="settings-divider"></div>
+
+    <div class="section-title"><h2>💾 پشتیبان‌گیری</h2></div>
+    <p class="settings-hint">یک بک‌آپ شامل دیتابیس کامل (اعضا، تردد، لاگ) و عکس‌هاست. پیشنهاد می‌شود مرتب یک نسخه دانلود و جای امنی نگه‌داری شود.</p>
+    <div class="settings-actions">
+      <button class="btn-primary" onclick="downloadBackup()">⬇️ دانلود بک‌آپ</button>
+      <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">⬆️ افزودن بک‌آپ (بازیابی)</button>
+      <input type="file" id="restoreFileInput" accept=".zip" style="display:none" onchange="restoreBackup(event)" />
+    </div>
+    <div class="error-msg" id="restoreStatusMsg"></div>
   </div>
 </main>
 
@@ -289,21 +310,11 @@
   </div>
 </div>
 
-<div class="overlay" id="logOverlay">
-  <div class="modal" style="max-width:460px;">
-    <h3>لاگ زنده — هر چهره‌ای که شناسایی شود</h3>
-    <div id="recognitionLogList" class="feed-list" style="max-height:420px;"></div>
-    <div id="recognitionLogEmpty" class="empty" style="display:none; padding:24px;">هنوز چیزی ثبت نشده.</div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeLogModal()">بستن</button>
-    </div>
-  </div>
-</div>
-
 <script>
 const API_BASE = '';
 let activePendingId = null;
 let activeTab = 'queue';
+let restoringNow = false; // see restoreBackup() + the 'backup_restored' WS handler below
 const pendingItems = new Map(); // id -> item data, kept in sync with server
 let members = []; // loaded lazily the first time the "اعضا" tab is opened
 
@@ -329,9 +340,12 @@ function showTab(name) {
   activeTab = name;
   document.getElementById('tabQueue').classList.toggle('active', name === 'queue');
   document.getElementById('tabMembers').classList.toggle('active', name === 'members');
+  document.getElementById('tabSettings').classList.toggle('active', name === 'settings');
   document.getElementById('tabBtnQueue').classList.toggle('active', name === 'queue');
   document.getElementById('tabBtnMembers').classList.toggle('active', name === 'members');
+  document.getElementById('tabBtnSettings').classList.toggle('active', name === 'settings');
   if (name === 'members') loadMembers();
+  if (name === 'settings') loadRecognitionLog();
 }
 
 function render() {
@@ -621,34 +635,30 @@ async function submitAssign(userId) {
   showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
 }
 
-// ---- "لاگ زنده" (هر چهره‌ای که شناسایی شود) ----
+// ---- "لاگ زنده" تب تنظیمات (هر چهره‌ای که شناسایی شود) ----
 const RECOGNITION_LOG_CAP = 300; // keep memory/DOM bounded; older entries just scroll off
 let recognitionLog = []; // newest first
-let logModalOpen = false;
+let recognitionLogLoaded = false;
 
-async function openLogModal() {
-  logModalOpen = true;
-  document.getElementById('logOverlay').classList.add('open');
-  try {
-    const res = await fetch(`${API_BASE}/api/recognition-log`);
-    recognitionLog = await res.json(); // server already returns newest-first
-  } catch (e) {
-    // keep whatever we already had in memory (e.g. from live WS events) if the fetch fails
+async function loadRecognitionLog() {
+  if (!recognitionLogLoaded) {
+    try {
+      const res = await fetch(`${API_BASE}/api/recognition-log`);
+      recognitionLog = await res.json(); // server already returns newest-first
+      recognitionLogLoaded = true;
+    } catch (e) {
+      // keep whatever we already had in memory (e.g. from live WS events) if the fetch fails
+    }
   }
   renderRecognitionLog();
 }
 
-function closeLogModal() {
-  logModalOpen = false;
-  document.getElementById('logOverlay').classList.remove('open');
-}
-
 function addRecognitionLogEntry(entry) {
-  // kept up to date in the background even while the modal is closed, so it
-  // opens with fresh data instantly instead of waiting on the network
+  // kept up to date in the background even while the settings tab isn't
+  // open, so switching to it shows fresh data instantly
   recognitionLog.unshift(entry);
   if (recognitionLog.length > RECOGNITION_LOG_CAP) recognitionLog.length = RECOGNITION_LOG_CAP;
-  if (logModalOpen) renderRecognitionLog();
+  if (activeTab === 'settings') renderRecognitionLog();
 }
 
 function renderRecognitionLog() {
@@ -660,6 +670,65 @@ function renderRecognitionLog() {
       <span>${new Date(e.created_at).toLocaleTimeString('fa-IR')}</span>
     </div>
   `).join('');
+}
+
+// ---- "پشتیبان‌گیری" تب تنظیمات ----
+function downloadBackup() {
+  // a plain navigation, not fetch()+blob: the server sends
+  // Content-Disposition: attachment, so the browser just handles the "Save
+  // As" download natively and the SPA state is completely unaffected
+  window.location.href = `${API_BASE}/api/backup`;
+}
+
+async function restoreBackup(event) {
+  const input = event.target;
+  const file = input.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById('restoreStatusMsg');
+  statusEl.style.color = '';
+  statusEl.textContent = '';
+
+  const confirmed = confirm(
+    'این کار تمام اعضا، تردد، لاگ و عکس‌های فعلی را با محتوای این فایل بک‌آپ جایگزین می‌کند و قابل بازگشت نیست (به‌جز یک نسخهٔ امن از دیتابیس فعلی که سرور خودکار نگه می‌دارد). ادامه می‌دهید؟'
+  );
+  if (!confirmed) {
+    input.value = '';
+    return;
+  }
+
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = 'در حال بازیابی... لطفاً صبر کنید و صفحه را نبندید.';
+
+  // this same tab is also connected to /ws/queue and will receive its OWN
+  // 'backup_restored' broadcast a moment after this fetch resolves --
+  // without this flag it would reload the page twice (once here, once from
+  // the WS handler below)
+  restoringNow = true;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/backup/restore`, { method: 'POST', body: formData });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      restoringNow = false;
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = result.detail || 'بازیابی انجام نشد.';
+      return;
+    }
+    // simplest correct way to reflect a full data swap everywhere in the
+    // panel (queue/members/log all changed at once) is a clean reload
+    alert('بازیابی با موفقیت انجام شد. صفحه رفرش می‌شود.');
+    window.location.reload();
+  } catch (e) {
+    restoringNow = false;
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = 'ارتباط با سرور برقرار نشد. دوباره تلاش کنید.';
+  } finally {
+    input.value = '';
+  }
 }
 
 // re-render "N seconds ago" labels periodically
@@ -714,6 +783,14 @@ function connectWs() {
         full_name: msg.full_name,
         created_at: msg.created_at,
       });
+    } else if (msg.event === 'backup_restored') {
+      // covers any OTHER open tab/session -- the tab that triggered the
+      // restore (restoringNow === true there) already reloads itself
+      // directly from restoreBackup() above, so it skips this to avoid a
+      // double alert/reload
+      if (restoringNow) return;
+      alert('یک بازیابی بک‌آپ روی سرور انجام شد. صفحه رفرش می‌شود.');
+      window.location.reload();
     }
   };
 }
