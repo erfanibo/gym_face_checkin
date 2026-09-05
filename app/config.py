@@ -61,6 +61,24 @@ REGISTRATION_DUPLICATE_FACE_TOLERANCE = KNOWN_USER_TOLERANCE
 ATTENDANCE_COOLDOWN_SECONDS = 300  # 5 minutes
 
 # ---------------------------------------------------------------------------
+# Live recognition log ("لاگ زنده") — separate from attendance_log above.
+# ---------------------------------------------------------------------------
+# Every time a KNOWN member's face is matched in a camera frame, a row is
+# written here immediately (no 5-minute wait) so an operator can open the
+# live-log panel and see "X شناسایی شد" in near real time. Still debounced by
+# a SMALL interval per member -- not to hide events, but because the camera
+# re-matches the same standing person several times per second
+# (see PROCESS_EVERY_N_FRAMES above), and a DB row + WebSocket broadcast for
+# every single one of those would flood both the log and the database for no
+# benefit. 4 seconds was chosen as a middle ground between "feels instant"
+# and "doesn't spam the panel while someone just stands there".
+RECOGNITION_LOG_DEBOUNCE_SECONDS = 4
+
+# Upper bound on how many rows GET /api/recognition-log will ever return in
+# one request, regardless of what the caller asks for.
+RECOGNITION_LOG_MAX_LIMIT = 500
+
+# ---------------------------------------------------------------------------
 # Multi-sample recognition per member
 # ---------------------------------------------------------------------------
 # Each member can have several stored face vectors (member_face_samples table)

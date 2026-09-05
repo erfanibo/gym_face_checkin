@@ -63,9 +63,23 @@ CREATE TABLE IF NOT EXISTS member_face_samples (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_pending_status    ON pending_queue(status);
-CREATE INDEX IF NOT EXISTS idx_attendance_user   ON attendance_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_face_samples_user ON member_face_samples(user_id);
+-- Raw, near-real-time "X شناسایی شد" log -- every time a known member's face
+-- is matched by the camera, independent of attendance_log's 5-minute
+-- cooldown (only lightly debounced, see config.RECOGNITION_LOG_DEBOUNCE_SECONDS).
+-- full_name is captured at write time (not JOINed later) so this log stays
+-- readable even after a member is renamed or deleted.
+CREATE TABLE IF NOT EXISTS recognition_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES registered_users(id),
+    full_name   TEXT NOT NULL,
+    distance    REAL NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_status       ON pending_queue(status);
+CREATE INDEX IF NOT EXISTS idx_attendance_user      ON attendance_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_face_samples_user    ON member_face_samples(user_id);
+CREATE INDEX IF NOT EXISTS idx_recognition_log_id   ON recognition_log(id DESC);
 """
 
 

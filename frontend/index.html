@@ -157,6 +157,8 @@
     background: var(--panel-2); border-radius: 9px; color: var(--muted);
   }
   .feed-item b { color: var(--text); font-weight: 600; }
+  .feed-item.log-item { animation: appear .2s ease-out; }
+  .feed-item.log-item .dist { color: var(--muted); font-size: 11px; }
 
   /* modal */
   .overlay {
@@ -193,7 +195,10 @@
 
 <header>
   <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
-  <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
+  <div style="display:flex; align-items:center; gap:16px;">
+    <button class="btn-secondary btn-sm" onclick="openLogModal()">🪵 لاگ زنده</button>
+    <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
+  </div>
 </header>
 
 <main>
@@ -280,6 +285,17 @@
     <div class="error-msg" id="assignModalError"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeAssignModal()">انصراف</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="logOverlay">
+  <div class="modal" style="max-width:460px;">
+    <h3>لاگ زنده — هر چهره‌ای که شناسایی شود</h3>
+    <div id="recognitionLogList" class="feed-list" style="max-height:420px;"></div>
+    <div id="recognitionLogEmpty" class="empty" style="display:none; padding:24px;">هنوز چیزی ثبت نشده.</div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeLogModal()">بستن</button>
     </div>
   </div>
 </div>
@@ -605,6 +621,47 @@ async function submitAssign(userId) {
   showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
 }
 
+// ---- "لاگ زنده" (هر چهره‌ای که شناسایی شود) ----
+const RECOGNITION_LOG_CAP = 300; // keep memory/DOM bounded; older entries just scroll off
+let recognitionLog = []; // newest first
+let logModalOpen = false;
+
+async function openLogModal() {
+  logModalOpen = true;
+  document.getElementById('logOverlay').classList.add('open');
+  try {
+    const res = await fetch(`${API_BASE}/api/recognition-log`);
+    recognitionLog = await res.json(); // server already returns newest-first
+  } catch (e) {
+    // keep whatever we already had in memory (e.g. from live WS events) if the fetch fails
+  }
+  renderRecognitionLog();
+}
+
+function closeLogModal() {
+  logModalOpen = false;
+  document.getElementById('logOverlay').classList.remove('open');
+}
+
+function addRecognitionLogEntry(entry) {
+  // kept up to date in the background even while the modal is closed, so it
+  // opens with fresh data instantly instead of waiting on the network
+  recognitionLog.unshift(entry);
+  if (recognitionLog.length > RECOGNITION_LOG_CAP) recognitionLog.length = RECOGNITION_LOG_CAP;
+  if (logModalOpen) renderRecognitionLog();
+}
+
+function renderRecognitionLog() {
+  document.getElementById('recognitionLogEmpty').style.display = recognitionLog.length ? 'none' : 'block';
+  const list = document.getElementById('recognitionLogList');
+  list.innerHTML = recognitionLog.map(e => `
+    <div class="feed-item log-item">
+      <span><b>${e.full_name}</b> شناسایی شد</span>
+      <span>${new Date(e.created_at).toLocaleTimeString('fa-IR')}</span>
+    </div>
+  `).join('');
+}
+
 // re-render "N seconds ago" labels periodically
 setInterval(render, 10000);
 
@@ -652,6 +709,11 @@ function connectWs() {
         member.phone = msg.phone;
         if (activeTab === 'members') renderMembers();
       }
+    } else if (msg.event === 'recognition_seen') {
+      addRecognitionLogEntry({
+        full_name: msg.full_name,
+        created_at: msg.created_at,
+      });
     }
   };
 }

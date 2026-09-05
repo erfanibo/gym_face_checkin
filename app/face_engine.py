@@ -116,6 +116,13 @@ class FaceEngine:
         # service restart doesn't reset the in/out toggle or the cooldown.
         self._last_attendance: dict[int, dict] = {}
 
+        # user_id -> datetime of the last row written to recognition_log.
+        # Purely an in-memory rate limiter (see _maybe_log_recognition) --
+        # unlike _last_attendance, it's fine for this to reset on restart:
+        # worst case is one extra log line right after a restart, not a
+        # correctness issue like losing the in/out toggle would be.
+        self._last_recognition_log: dict[int, datetime] = {}
+
         self.reload_known_users()
         self.reload_pending_queue()
         self._load_last_attendance()
@@ -227,9 +234,11 @@ class FaceEngine:
     # per-face decision tree
     # ------------------------------------------------------------------ #
     def _handle_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray):
-        user_id = self._match_known(encoding)
-        if user_id is not None:
+        match = self._match_known(encoding)
+        if match is not None:
+            user_id, distance = match
             self._maybe_log_attendance(user_id)
+            self._maybe_log_recognition(user_id, distance)
             return
 
         pending_id = self._match_pending(encoding)
@@ -239,19 +248,23 @@ class FaceEngine:
 
         self._enqueue_new_face(encoding, location_small, full_frame)
 
-    def _match_known(self, encoding: np.ndarray) -> int | None:
+    def _match_known(self, encoding: np.ndarray) -> tuple[int, float] | None:
         """
         Compares against every sample of every member at once (a few thousand
         vector comparisons even at ~200 members x 8 samples -- negligible
-        with numpy, well under the per-frame budget) and returns whichever
-        member owns the single closest sample, provided it's within tolerance.
+        with numpy, well under the per-frame budget) and returns
+        (user_id, distance) for whichever member owns the single closest
+        sample, provided it's within tolerance. The distance is only used
+        for the recognition log below (nice for debugging borderline
+        matches); attendance logic never needed it before, so it's a plain
+        tuple return rather than something that couldn't ever return before.
         """
         if not self._known_sample_encodings:
             return None
         distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
         best_idx = int(np.argmin(distances))
         if distances[best_idx] <= config.KNOWN_USER_TOLERANCE:
-            return self._known_sample_user_ids[best_idx]
+            return self._known_sample_user_ids[best_idx], float(distances[best_idx])
         return None
 
     def _match_pending(self, encoding: np.ndarray) -> int | None:
@@ -354,6 +367,38 @@ class FaceEngine:
 
         next_type = "out" if (last is not None and last["type"] == "in") else "in"
         self._record_attendance(user_id, next_type)
+
+    def _maybe_log_recognition(self, user_id: int, distance: float):
+        """
+        Powers the "لاگ زنده" (live log) panel — a raw, near-real-time
+        "X شناسایی شد" feed, completely separate from attendance_log's
+        5-minute-cooldown/in-out logic above. Debounced by a much smaller
+        interval (config.RECOGNITION_LOG_DEBOUNCE_SECONDS, a few seconds) so
+        one person standing at the camera doesn't write + broadcast dozens of
+        near-identical rows per minute (see PROCESS_EVERY_N_FRAMES).
+        """
+        now = datetime.now(timezone.utc)
+        last_at = self._last_recognition_log.get(user_id)
+        if last_at is not None and (now - last_at).total_seconds() < config.RECOGNITION_LOG_DEBOUNCE_SECONDS:
+            return
+        self._last_recognition_log[user_id] = now
+
+        with db_cursor(commit=True) as cur:
+            cur.execute("SELECT full_name FROM registered_users WHERE id=?", (user_id,))
+            row = cur.fetchone()
+            full_name = row["full_name"] if row else "?"
+            cur.execute(
+                "INSERT INTO recognition_log (user_id, full_name, distance, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, full_name, distance, now.isoformat()),
+            )
+
+        self._broadcast_soon({
+            "event": "recognition_seen",
+            "user_id": user_id,
+            "full_name": full_name,
+            "distance": distance,
+            "created_at": now.isoformat(),
+        })
 
     def log_manual_attendance(self, user_id: int, event_type: str | None = None) -> dict:
         """

@@ -95,12 +95,13 @@ def list_attendance(limit: int = 50, since_id: Optional[int] = None):
 async def delete_user(user_id: int, request: Request):
     """
     Permanently removes a member: their registration row, their attendance
-    history, all of their stored face samples (member_face_samples), and (if
-    any) the historical pending_queue row that points at them — all deleted
-    in one go because attendance_log.user_id, member_face_samples.user_id,
-    and pending_queue.registered_user_id are foreign keys, and
-    foreign_keys=ON is enabled, so the parent row can't be deleted while
-    children still reference it.
+    history, all of their stored face samples (member_face_samples), all of
+    their recognition-log rows, and (if any) the historical pending_queue row
+    that points at them — all deleted in one go because attendance_log.
+    user_id, member_face_samples.user_id, recognition_log.user_id, and
+    pending_queue.registered_user_id are foreign keys, and foreign_keys=ON is
+    enabled, so the parent row can't be deleted while children still
+    reference it.
     """
     with db_cursor() as cur:
         cur.execute("SELECT full_name, photo_path FROM registered_users WHERE id=?", (user_id,))
@@ -111,6 +112,7 @@ async def delete_user(user_id: int, request: Request):
     with db_cursor(commit=True) as cur:
         cur.execute("DELETE FROM attendance_log WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM member_face_samples WHERE user_id=?", (user_id,))
+        cur.execute("DELETE FROM recognition_log WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM pending_queue WHERE registered_user_id=?", (user_id,))
         cur.execute("DELETE FROM registered_users WHERE id=?", (user_id,))
 

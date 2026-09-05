@@ -28,6 +28,14 @@ class AssignPendingResponse(BaseModel):
     sample_count: int
 
 
+class RecognitionLogEntry(BaseModel):
+    id: int
+    user_id: int
+    full_name: str
+    distance: float
+    created_at: str
+
+
 class RegisteredUserOut(BaseModel):
     id: int
     membership_code: Optional[str]
