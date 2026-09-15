@@ -9,8 +9,13 @@ frame is being processed.
 
 Flow per processed frame:
   1. Grab frame from the webcam, downscale, find faces + 128-d encodings.
-  2. For each face:
-       a. Compare against every ENROLLED member (registered_users).
+  2. If at least one face was found, immediately grab RECOGNITION_BURST_FRAMES-1
+     more frames (right then, not waiting for the next scheduled frame) and
+     detect+encode faces in those too, folding each one into whichever
+     "sighting" (from step 1) its face-box position is closest to.
+  3. For each sighting (now backed by up to RECOGNITION_BURST_FRAMES encodings):
+       a. Compare against every ENROLLED member (registered_users) -- taking
+          whichever single encoding gave the closest match, not an average.
           -> match: log attendance (throttled, alternates ورود/خروج) and stop.
        b. Compare against faces already waiting in pending_queue that were
           seen within the last PENDING_DEDUP_WINDOW_SECONDS.
@@ -97,6 +102,7 @@ class FaceEngine:
         self._loop = loop
         self._thread: threading.Thread | None = None
         self._running = False
+        self._video: cv2.VideoCapture | None = None  # set in _run_loop; read by _capture_burst_frames too
 
         # in-memory caches mirrored from SQLite, refreshed on demand so the
         # hot per-frame loop never has to hit the DB just to compare vectors.
@@ -213,6 +219,7 @@ class FaceEngine:
             print(f"[face_engine] ERROR: could not open camera index {config.CAMERA_INDEX}")
             self._running = False
             return
+        self._video = video  # so _capture_burst_frames (called from _process_frame) can read more
 
         frame_count = 0
         try:
@@ -231,31 +238,89 @@ class FaceEngine:
                 except Exception as exc:  # never let one bad frame kill the thread
                     print(f"[face_engine] frame processing error: {exc}")
         finally:
+            self._video = None
             video.release()
 
-    def _process_frame(self, frame: np.ndarray):
+    def _detect(self, frame: np.ndarray) -> tuple[list[tuple], list[np.ndarray]]:
+        """Downscale + detect + encode. Shared by the primary frame and every
+        extra burst frame below so both go through the exact same pipeline."""
         small = cv2.resize(frame, (0, 0), fx=config.FRAME_RESIZE_SCALE, fy=config.FRAME_RESIZE_SCALE)
         rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-
         locations = face_recognition.face_locations(rgb_small)
         if not locations:
-            return
+            return [], []
         encodings = face_recognition.face_encodings(rgb_small, locations)
+        return locations, encodings
 
-        for location, encoding in zip(locations, encodings):
-            self._handle_face(encoding, location, frame)
+    def _process_frame(self, frame: np.ndarray):
+        locations, encodings = self._detect(frame)
+        if not locations:
+            return
+
+        # one "sighting" per face found in THIS frame; extra burst frames
+        # below just add more encodings onto whichever sighting they're
+        # closest to, they never start new ones
+        sightings = [{"location": loc, "encodings": [enc]} for loc, enc in zip(locations, encodings)]
+
+        for _ in range(config.RECOGNITION_BURST_FRAMES - 1):
+            if self._video is None:
+                break
+            ok, extra_frame = self._video.read()
+            if not ok:
+                continue
+            extra_locations, extra_encodings = self._detect(extra_frame)
+            for loc, enc in zip(extra_locations, extra_encodings):
+                sighting = self._closest_sighting(sightings, loc)
+                if sighting is not None:
+                    sighting["encodings"].append(enc)
+                # if nothing is close enough, this extra face is dropped --
+                # it's either someone else who just stepped into frame, or
+                # the original person moved too much; safer to ignore it
+                # than to risk folding a different face into this sighting
+
+        for sighting in sightings:
+            self._handle_face(sighting["encodings"], sighting["location"], frame)
+
+    @staticmethod
+    def _closest_sighting(sightings: list[dict], location: tuple, max_relative_distance: float = 0.6):
+        """
+        Finds whichever existing sighting's face-box center is nearest to
+        `location`, so a face seen a moment later in a burst frame gets
+        folded into "the same person's" encoding list instead of starting a
+        new one. The allowed radius scales with face size (max_relative_distance
+        x box width) rather than being a fixed pixel count, so it behaves the
+        same whether someone is standing close to the camera (big box) or far
+        (small box). Returns None if nothing is close enough -- e.g. the
+        original person stepped out of frame, or someone else walked in.
+        """
+        top, right, bottom, left = location
+        cx, cy = (left + right) / 2, (top + bottom) / 2
+        width = max(right - left, 1)
+
+        best, best_dist = None, width * max_relative_distance
+        for sighting in sightings:
+            st, sr, sb, sl = sighting["location"]
+            scx, scy = (sl + sr) / 2, (st + sb) / 2
+            dist = ((cx - scx) ** 2 + (cy - scy) ** 2) ** 0.5
+            if dist < best_dist:
+                best, best_dist = sighting, dist
+        return best
 
     # ------------------------------------------------------------------ #
     # per-face decision tree
     # ------------------------------------------------------------------ #
-    def _handle_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray):
-        match = self._match_known(encoding)
+    def _handle_face(self, encodings: list[np.ndarray], location_small: tuple, full_frame: np.ndarray):
+        match = self._match_known(encodings)
         if match is not None:
             user_id, distance = match
             self._maybe_log_attendance(user_id)
             self._maybe_log_recognition(user_id, distance)
             return
 
+        # the unknown/pending path only ever needed one representative
+        # encoding -- use the ORIGINAL (first) frame's, for consistency with
+        # the face crop that gets saved from `full_frame` below
+        encoding = encodings[0]
         pending_id = self._match_pending(encoding)
         if pending_id is not None:
             self._touch_pending(pending_id, encoding)
@@ -263,23 +328,30 @@ class FaceEngine:
 
         self._enqueue_new_face(encoding, location_small, full_frame)
 
-    def _match_known(self, encoding: np.ndarray) -> tuple[int, float] | None:
+    def _match_known(self, encodings: list[np.ndarray]) -> tuple[int, float] | None:
         """
-        Compares against every sample of every member at once (a few thousand
-        vector comparisons even at ~200 members x 8 samples -- negligible
-        with numpy, well under the per-frame budget) and returns
-        (user_id, distance) for whichever member owns the single closest
-        sample, provided it's within tolerance. The distance is only used
-        for the recognition log below (nice for debugging borderline
-        matches); attendance logic never needed it before, so it's a plain
-        tuple return rather than something that couldn't ever return before.
+        Compares EVERY supplied encoding (1 to config.RECOGNITION_BURST_FRAMES
+        of them, all of the same sighting) against every sample of every
+        member, and returns (user_id, distance) for whichever single
+        (encoding, stored-sample) pairing was closest overall, provided it's
+        within tolerance. Deliberately "best of N", not an average: a good
+        frame should be able to rescue a match even if another frame in the
+        same burst was blurry/off-angle.
         """
         if not self._known_sample_encodings:
             return None
-        distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
-        best_idx = int(np.argmin(distances))
-        if distances[best_idx] <= config.KNOWN_USER_TOLERANCE:
-            return self._known_sample_user_ids[best_idx], float(distances[best_idx])
+
+        best_user_id, best_distance = None, None
+        for encoding in encodings:
+            distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
+            idx = int(np.argmin(distances))
+            distance = float(distances[idx])
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_user_id = self._known_sample_user_ids[idx]
+
+        if best_distance is not None and best_distance <= config.KNOWN_USER_TOLERANCE:
+            return best_user_id, best_distance
         return None
 
     def _match_pending(self, encoding: np.ndarray) -> int | None:
