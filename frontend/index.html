@@ -159,6 +159,8 @@
   .feed-item b { color: var(--text); font-weight: 600; }
   .feed-item.log-item { animation: appear .2s ease-out; }
   .feed-item.log-item .dist { color: var(--muted); font-size: 11px; }
+  .feed-item.log-unknown { border-right: 3px solid var(--warn); }
+  .feed-item.log-unknown b { color: var(--warn); }
 
   .settings-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
   .settings-divider { border-top: 1px solid var(--line); margin: 30px 0; }
@@ -238,9 +240,12 @@
 
   <div class="tab-panel" id="tabSettings">
     <div class="section-title"><h2>🪵 لاگ زنده</h2></div>
-    <p class="settings-hint">هر بار دوربین یک عضو را تشخیص دهد، بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله اینجا یک خط ثبت می‌شود.</p>
-    <div id="recognitionLogList" class="feed-list" style="max-height:280px;"></div>
-    <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
+    <p class="settings-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله یک خط ثبت می‌شود.</p>
+    <button class="btn-secondary" id="toggleLogBtn" onclick="toggleRecognitionLog()">نمایش لاگ</button>
+    <div id="recognitionLogWrap" style="display:none; margin-top:14px;">
+      <div id="recognitionLogList" class="feed-list" style="max-height:280px;"></div>
+      <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
+    </div>
 
     <div class="settings-divider"></div>
 
@@ -345,7 +350,6 @@ function showTab(name) {
   document.getElementById('tabBtnMembers').classList.toggle('active', name === 'members');
   document.getElementById('tabBtnSettings').classList.toggle('active', name === 'settings');
   if (name === 'members') loadMembers();
-  if (name === 'settings') loadRecognitionLog();
 }
 
 function render() {
@@ -635,13 +639,18 @@ async function submitAssign(userId) {
   showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
 }
 
-// ---- "لاگ زنده" تب تنظیمات (هر چهره‌ای که شناسایی شود) ----
+// ---- "لاگ زنده" تب تنظیمات (هر چهره‌ای که شناسایی شود، شناخته‌شده یا ناشناس) ----
 const RECOGNITION_LOG_CAP = 300; // keep memory/DOM bounded; older entries just scroll off
 let recognitionLog = []; // newest first
 let recognitionLogLoaded = false;
+let logVisible = false; // gated behind the "نمایش لاگ" button, not shown automatically
 
-async function loadRecognitionLog() {
-  if (!recognitionLogLoaded) {
+async function toggleRecognitionLog() {
+  logVisible = !logVisible;
+  document.getElementById('recognitionLogWrap').style.display = logVisible ? 'block' : 'none';
+  document.getElementById('toggleLogBtn').textContent = logVisible ? 'پنهان کردن لاگ' : 'نمایش لاگ';
+
+  if (logVisible && !recognitionLogLoaded) {
     try {
       const res = await fetch(`${API_BASE}/api/recognition-log`);
       recognitionLog = await res.json(); // server already returns newest-first
@@ -650,22 +659,22 @@ async function loadRecognitionLog() {
       // keep whatever we already had in memory (e.g. from live WS events) if the fetch fails
     }
   }
-  renderRecognitionLog();
+  if (logVisible) renderRecognitionLog();
 }
 
 function addRecognitionLogEntry(entry) {
-  // kept up to date in the background even while the settings tab isn't
-  // open, so switching to it shows fresh data instantly
+  // kept up to date in the background even while the log is hidden, so it
+  // shows fresh data instantly the moment "نمایش لاگ" is clicked
   recognitionLog.unshift(entry);
   if (recognitionLog.length > RECOGNITION_LOG_CAP) recognitionLog.length = RECOGNITION_LOG_CAP;
-  if (activeTab === 'settings') renderRecognitionLog();
+  if (logVisible) renderRecognitionLog();
 }
 
 function renderRecognitionLog() {
   document.getElementById('recognitionLogEmpty').style.display = recognitionLog.length ? 'none' : 'block';
   const list = document.getElementById('recognitionLogList');
   list.innerHTML = recognitionLog.map(e => `
-    <div class="feed-item log-item">
+    <div class="feed-item log-item${e.user_id ? '' : ' log-unknown'}">
       <span><b>${e.full_name}</b> شناسایی شد</span>
       <span>${new Date(e.created_at).toLocaleTimeString('fa-IR')}</span>
     </div>
@@ -780,6 +789,7 @@ function connectWs() {
       }
     } else if (msg.event === 'recognition_seen') {
       addRecognitionLogEntry({
+        user_id: msg.user_id,
         full_name: msg.full_name,
         created_at: msg.created_at,
       });

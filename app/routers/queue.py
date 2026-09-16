@@ -133,6 +133,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
     engine = request.app.state.face_engine
     engine.reload_known_users()
     engine.reload_pending_queue()
+    engine.forget_unknown_debounce(pending_id)
 
     await manager.broadcast({"event": "pending_resolved", "id": pending_id})
 
@@ -189,6 +190,7 @@ async def assign_pending_to_member(pending_id: int, payload: AssignPendingReques
     engine = request.app.state.face_engine
     engine.reload_known_users()
     engine.reload_pending_queue()
+    engine.forget_unknown_debounce(pending_id)
 
     await manager.broadcast({"event": "pending_resolved", "id": pending_id})
 
@@ -214,6 +216,7 @@ async def reject_pending(pending_id: int, request: Request):
 
     engine = request.app.state.face_engine
     engine.reload_pending_queue()
+    engine.forget_unknown_debounce(pending_id)
 
     await manager.broadcast({"event": "pending_resolved", "id": pending_id})
     return {"ok": True}

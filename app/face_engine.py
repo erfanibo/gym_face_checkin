@@ -16,18 +16,21 @@ Flow per processed frame:
   3. For each sighting (now backed by up to RECOGNITION_BURST_FRAMES encodings):
        a. Compare against every ENROLLED member (registered_users) -- taking
           whichever single encoding gave the closest match, not an average.
-          -> match: log attendance (throttled, alternates ورود/خروج) and stop.
+          -> match: log attendance (throttled, alternates ورود/خروج), write
+             a "لاگ زنده" line, and stop.
        b. Compare against faces already waiting in pending_queue that were
           seen within the last PENDING_DEDUP_WINDOW_SECONDS.
-          -> match: just bump last_seen_at (anti-spam, no new row/photo).
+          -> match: just bump last_seen_at (anti-spam, no new row/photo),
+             and write a "لاگ زنده" line for this unknown face too (debounced
+             per pending_id, same cadence as a known match).
           NOTE: each pending entry keeps a small ROLLING WINDOW of its most
           recent encodings (not just the first one it was created with), so
           natural pose/expression drift while someone stands at the camera
           doesn't cause them to "stop matching" and get re-enqueued as a
           brand-new face.
        c. Otherwise: this is a brand-new unknown face -> crop + save a photo,
-          insert a pending_queue row, and push a "new_pending" WebSocket event
-          so the reception panel updates live.
+          insert a pending_queue row, push a "new_pending" WebSocket event so
+          the reception panel updates live, AND write a "لاگ زنده" line.
 """
 from __future__ import annotations
 
@@ -129,6 +132,12 @@ class FaceEngine:
         # correctness issue like losing the in/out toggle would be.
         self._last_recognition_log: dict[int, datetime] = {}
 
+        # same idea, but keyed by pending_id for UNKNOWN-face log entries
+        # (see _maybe_log_unknown_recognition) -- kept separate from the dict
+        # above so a member id and a pending id sharing the same integer can
+        # never suppress each other's debounce timer.
+        self._last_unknown_recognition_log: dict[int, datetime] = {}
+
         self.reload_known_users()
         self.reload_pending_queue()
         self._load_last_attendance()
@@ -194,6 +203,19 @@ class FaceEngine:
         self.reload_pending_queue()
         self._load_last_attendance()
         self._last_recognition_log = {}
+        self._last_unknown_recognition_log = {}
+
+    def forget_unknown_debounce(self, pending_id: int):
+        """
+        Called by routers/queue.py whenever a pending_queue row leaves
+        'pending' status (registered, assigned, or rejected). Without this,
+        _last_unknown_recognition_log would keep one entry PER PENDING_ID
+        EVER CREATED for the lifetime of the process -- harmless for
+        matching (it's never read after the row is resolved), but pure
+        memory growth over a long uptime. Safe to call even if the id was
+        never in there.
+        """
+        self._last_unknown_recognition_log.pop(pending_id, None)
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -310,9 +332,8 @@ class FaceEngine:
     # per-face decision tree
     # ------------------------------------------------------------------ #
     def _handle_face(self, encodings: list[np.ndarray], location_small: tuple, full_frame: np.ndarray):
-        match = self._match_known(encodings)
-        if match is not None:
-            user_id, distance = match
+        user_id, distance = self._match_known(encodings)
+        if user_id is not None:
             self._maybe_log_attendance(user_id)
             self._maybe_log_recognition(user_id, distance)
             return
@@ -324,22 +345,28 @@ class FaceEngine:
         pending_id = self._match_pending(encoding)
         if pending_id is not None:
             self._touch_pending(pending_id, encoding)
+            self._maybe_log_unknown_recognition(pending_id, distance)
             return
 
-        self._enqueue_new_face(encoding, location_small, full_frame)
+        pending_id = self._enqueue_new_face(encoding, location_small, full_frame)
+        self._maybe_log_unknown_recognition(pending_id, distance)
 
-    def _match_known(self, encodings: list[np.ndarray]) -> tuple[int, float] | None:
+    def _match_known(self, encodings: list[np.ndarray]) -> tuple[int | None, float | None]:
         """
         Compares EVERY supplied encoding (1 to config.RECOGNITION_BURST_FRAMES
         of them, all of the same sighting) against every sample of every
         member, and returns (user_id, distance) for whichever single
-        (encoding, stored-sample) pairing was closest overall, provided it's
-        within tolerance. Deliberately "best of N", not an average: a good
-        frame should be able to rescue a match even if another frame in the
-        same burst was blurry/off-angle.
+        (encoding, stored-sample) pairing was closest overall. Deliberately
+        "best of N", not an average: a good frame should be able to rescue a
+        match even if another frame in the same burst was blurry/off-angle.
+
+        ALWAYS returns a distance when there's at least one enrolled member,
+        even if it didn't clear tolerance (user_id is then None) -- this is
+        used to log "closest known match was 0.58 away" on unknown-face log
+        entries, which is handy for tuning KNOWN_USER_TOLERANCE later.
         """
         if not self._known_sample_encodings:
-            return None
+            return None, None
 
         best_user_id, best_distance = None, None
         for encoding in encodings:
@@ -352,7 +379,7 @@ class FaceEngine:
 
         if best_distance is not None and best_distance <= config.KNOWN_USER_TOLERANCE:
             return best_user_id, best_distance
-        return None
+        return None, best_distance
 
     def _match_pending(self, encoding: np.ndarray) -> int | None:
         """
@@ -402,7 +429,7 @@ class FaceEngine:
                     p["encodings"] = p["encodings"][-config.PENDING_DEDUP_MAX_SAMPLES:]
                 break
 
-    def _enqueue_new_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray):
+    def _enqueue_new_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray) -> int:
         now = _now_iso()
         photo_path = self._save_face_crop(full_frame, location_small)
 
@@ -422,6 +449,8 @@ class FaceEngine:
             "photo_url": f"/static/pending_faces/{photo_path.name}",
             "first_seen_at": now,
         })
+
+        return new_id
 
     def _save_face_crop(self, full_frame: np.ndarray, location_small: tuple):
         top, right, bottom, left = location_small
@@ -483,6 +512,42 @@ class FaceEngine:
             "event": "recognition_seen",
             "user_id": user_id,
             "full_name": full_name,
+            "distance": distance,
+            "created_at": now.isoformat(),
+        })
+
+    def _maybe_log_unknown_recognition(self, pending_id: int, distance: float | None):
+        """
+        Same live-log feed as _maybe_log_recognition above, but for a face
+        that did NOT match any enrolled member -- either a brand-new pending
+        entry or one still waiting in the queue. Kept in a SEPARATE debounce
+        dict keyed by pending_id (not user_id) so a member id and a pending
+        id that happen to share the same integer can never collide/suppress
+        each other's log lines.
+
+        `distance` is the nearest known-member distance found anyway (see
+        _match_known's ALWAYS-return-a-distance behavior), so an operator
+        can see e.g. "closest known member was 0.58 away" -- useful for
+        judging whether KNOWN_USER_TOLERANCE needs adjusting -- and is simply
+        omitted (NULL) if there are no enrolled members at all yet.
+        """
+        now = datetime.now(timezone.utc)
+        last_at = self._last_unknown_recognition_log.get(pending_id)
+        if last_at is not None and (now - last_at).total_seconds() < config.RECOGNITION_LOG_DEBOUNCE_SECONDS:
+            return
+        self._last_unknown_recognition_log[pending_id] = now
+
+        label = f"چهرهٔ ناشناس #{pending_id}"
+        with db_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO recognition_log (user_id, full_name, distance, created_at) VALUES (NULL, ?, ?, ?)",
+                (label, distance, now.isoformat()),
+            )
+
+        self._broadcast_soon({
+            "event": "recognition_seen",
+            "user_id": None,
+            "full_name": label,
             "distance": distance,
             "created_at": now.isoformat(),
         })

@@ -63,16 +63,22 @@ CREATE TABLE IF NOT EXISTS member_face_samples (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Raw, near-real-time "X شناسایی شد" log -- every time a known member's face
--- is matched by the camera, independent of attendance_log's 5-minute
--- cooldown (only lightly debounced, see config.RECOGNITION_LOG_DEBOUNCE_SECONDS).
--- full_name is captured at write time (not JOINed later) so this log stays
--- readable even after a member is renamed or deleted.
+-- Raw, near-real-time log -- every time a known member's face is matched OR
+-- an unrecognized face is seen (new or still-waiting-in-queue), independent
+-- of attendance_log's 5-minute cooldown (only lightly debounced, see
+-- config.RECOGNITION_LOG_DEBOUNCE_SECONDS). user_id is NULL for an unknown
+-- sighting (there's no member to point to). full_name is captured at write
+-- time (not JOINed later) so this log stays readable even after a member is
+-- renamed/deleted; for unknown sightings it holds a display label like
+-- "چهرهٔ ناشناس #<pending_id>". distance is the nearest known-member match
+-- found, even when that wasn't close enough to count as a real match --
+-- useful for an unknown entry ("closest known member was 0.58 away") --
+-- and can be NULL if there were no enrolled members at all to compare against.
 CREATE TABLE IF NOT EXISTS recognition_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER NOT NULL REFERENCES registered_users(id),
+    user_id     INTEGER REFERENCES registered_users(id),
     full_name   TEXT NOT NULL,
-    distance    REAL NOT NULL,
+    distance    REAL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -149,6 +155,38 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE attendance_log ADD COLUMN event_type TEXT NOT NULL DEFAULT 'in'")
 
 
+def _migrate_recognition_log_nullable(conn: sqlite3.Connection):
+    """
+    recognition_log originally required user_id/distance (only known-member
+    matches were logged). Now unknown-face sightings are logged too, with
+    user_id/distance NULL -- but SQLite can't just relax a NOT NULL
+    constraint with ALTER TABLE, so any database created before this change
+    needs its recognition_log table rebuilt (rename -> recreate with the new
+    nullable definition -> copy every existing row across -> drop the old
+    one). Only runs when the OLD stricter definition is actually detected,
+    so this is a no-op forever after the first upgrade.
+    """
+    cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(recognition_log)")}
+    user_id_col = cols.get("user_id")
+    if user_id_col is None or user_id_col["notnull"] == 0:
+        return  # table doesn't exist yet, or was already created with the new nullable schema
+    conn.execute("ALTER TABLE recognition_log RENAME TO recognition_log_old")
+    conn.execute(
+        """CREATE TABLE recognition_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER REFERENCES registered_users(id),
+            full_name   TEXT NOT NULL,
+            distance    REAL,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        )"""
+    )
+    conn.execute(
+        """INSERT INTO recognition_log (id, user_id, full_name, distance, created_at)
+           SELECT id, user_id, full_name, distance, created_at FROM recognition_log_old"""
+    )
+    conn.execute("DROP TABLE recognition_log_old")
+
+
 def _backfill_face_samples(conn: sqlite3.Connection):
     """
     member_face_samples was introduced after members had a single encoding
@@ -211,6 +249,7 @@ def init_db():
     with _lock:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        _migrate_recognition_log_nullable(conn)
         _backfill_membership_codes(conn)
         _backfill_face_samples(conn)
         conn.commit()

@@ -30,9 +30,9 @@ class AssignPendingResponse(BaseModel):
 
 class RecognitionLogEntry(BaseModel):
     id: int
-    user_id: int
+    user_id: int | None
     full_name: str
-    distance: float
+    distance: float | None
     created_at: str
 
 
