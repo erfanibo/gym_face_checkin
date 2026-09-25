@@ -8,7 +8,9 @@ freeze the whole FastAPI server (including the WebSocket updates) while a
 frame is being processed.
 
 Flow per processed frame:
-  1. Grab frame from the webcam, downscale, find faces + 128-d encodings.
+  1. Grab frame from the webcam, find faces on a DOWNSCALED copy (fast), then
+     compute each face's 128-d encoding from the FULL-RESOLUTION frame using
+     the upscaled face boxes (accurate) -- see FaceEngine._detect.
   2. If at least one face was found, immediately grab RECOGNITION_BURST_FRAMES-1
      more frames (right then, not waiting for the next scheduled frame) and
      detect+encode faces in those too, folding each one into whichever
@@ -42,6 +44,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import NamedTuple
 
 import cv2
 import numpy as np
@@ -55,6 +58,24 @@ from .ws_manager import manager
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class _KnownFaces(NamedTuple):
+    """
+    Immutable snapshot of every enrolled face sample: user_ids[i] owns
+    encodings[i] (shape (N, 128), or None when nobody is enrolled).
+
+    The two halves used to live in two separate lists on FaceEngine that were
+    replaced one after the other, so the camera thread could read the NEW
+    encodings together with the OLD user_ids (or vice versa) if a reload from a
+    request thread landed between the two assignments -- the argmin index would
+    then point at the wrong member. Keeping both in ONE object that is swapped
+    with a single attribute assignment (atomic under the GIL) makes that
+    impossible: a reader takes `snapshot = self._known` once and every lookup
+    after that uses the same consistent pair.
+    """
+    user_ids: tuple
+    encodings: np.ndarray | None
 
 
 def encoding_to_blob(encoding: np.ndarray) -> bytes:
@@ -110,15 +131,30 @@ class FaceEngine:
         # in-memory caches mirrored from SQLite, refreshed on demand so the
         # hot per-frame loop never has to hit the DB just to compare vectors.
         # Each member can have MULTIPLE samples (member_face_samples table),
-        # so these are flat, parallel lists: _known_sample_user_ids[i] is the
-        # owner of _known_sample_encodings[i]. A member with 8 samples simply
-        # appears 8 times, once per sample -- face_distance() compares the
-        # incoming frame against all of them at once and we take whichever
-        # single sample is closest, from whichever member.
-        self._known_sample_user_ids: list[int] = []
-        self._known_sample_encodings: list[np.ndarray] = []
+        # so the cache is a flat, parallel pair: user_ids[i] is the owner of
+        # encodings[i]. A member with 8 samples simply appears 8 times, once
+        # per sample -- face_distance() compares the incoming frame against
+        # all of them at once and we take whichever single sample is closest,
+        # from whichever member.
+        #
+        # THREAD SAFETY: the pair lives in ONE immutable _KnownFaces object
+        # that reload_known_users() replaces with a single assignment; the
+        # camera thread must read `self._known` exactly once per operation
+        # (see _match_known) and never touch its halves separately.
+        self._known: _KnownFaces = _KnownFaces((), None)
 
-        self._pending_cache: list[dict] = []  # {id, encodings: [..], last_seen}
+        # Pending-queue cache: {id, encodings: [..], last_seen}. Unlike the
+        # known-faces cache this one is WRITTEN by the camera thread too
+        # (_touch_pending / _enqueue_new_face) as well as swapped wholesale by
+        # request threads (reload_pending_queue), so it needs a real lock.
+        # Held across "DB write + cache update" (camera side) and "DB read +
+        # cache swap" (reload side) so a reload can never slip in between the
+        # two halves and drop a freshly enqueued face from the cache -- which
+        # would make the same person get re-photographed and re-queued as if
+        # they were new. Lock order is always _pending_lock -> DB lock; nothing
+        # takes them the other way round, so they can't deadlock.
+        self._pending_lock = threading.RLock()
+        self._pending_cache: list[dict] = []
 
         # user_id -> {"at": datetime, "type": "in"|"out"} for the LAST logged
         # attendance event. Loaded from the DB (not just kept in memory) so a
@@ -157,19 +193,27 @@ class FaceEngine:
         with db_cursor() as cur:
             cur.execute("SELECT user_id, encoding FROM member_face_samples")
             rows = cur.fetchall()
-        self._known_sample_user_ids = [r["user_id"] for r in rows]
-        self._known_sample_encodings = [blob_to_encoding(r["encoding"]) for r in rows]
+
+        # build the COMPLETE new snapshot first, then publish it with one
+        # assignment (see _KnownFaces for why this must be a single swap)
+        user_ids = tuple(r["user_id"] for r in rows)
+        encodings = np.array([blob_to_encoding(r["encoding"]) for r in rows]) if rows else None
+        self._known = _KnownFaces(user_ids, encodings)
 
     def reload_pending_queue(self):
-        with db_cursor() as cur:
-            cur.execute(
-                "SELECT id, encoding, last_seen_at FROM pending_queue WHERE status='pending'"
-            )
-            rows = cur.fetchall()
-        self._pending_cache = [
-            {"id": r["id"], "encodings": [blob_to_encoding(r["encoding"])], "last_seen": r["last_seen_at"]}
-            for r in rows
-        ]
+        # DB read + cache swap happen under the lock together, so the camera
+        # thread's "DB insert + cache append" (_enqueue_new_face) can't
+        # interleave with them and get lost
+        with self._pending_lock:
+            with db_cursor() as cur:
+                cur.execute(
+                    "SELECT id, encoding, last_seen_at FROM pending_queue WHERE status='pending'"
+                )
+                rows = cur.fetchall()
+            self._pending_cache = [
+                {"id": r["id"], "encodings": [blob_to_encoding(r["encoding"])], "last_seen": r["last_seen_at"]}
+                for r in rows
+            ]
 
     def _load_last_attendance(self):
         """Restore the last known in/out state per member from attendance_log,
@@ -263,15 +307,55 @@ class FaceEngine:
             self._video = None
             video.release()
 
+    @staticmethod
+    def _upscale_location(location: tuple, frame_shape: tuple) -> tuple:
+        """
+        Maps a face box found on the DOWNSCALED image (top, right, bottom,
+        left) back onto the full-resolution frame, clamped to the frame so
+        rounding can never push it outside the image. Uses the exact inverse
+        of FRAME_RESIZE_SCALE (a float), not a rounded integer factor, so it
+        stays correct even for scales like 0.3 or 0.5.
+        """
+        inv = 1.0 / config.FRAME_RESIZE_SCALE
+        h, w = frame_shape[:2]
+        top, right, bottom, left = location
+        return (
+            max(0, min(h, int(round(top * inv)))),
+            max(0, min(w, int(round(right * inv)))),
+            max(0, min(h, int(round(bottom * inv)))),
+            max(0, min(w, int(round(left * inv)))),
+        )
+
     def _detect(self, frame: np.ndarray) -> tuple[list[tuple], list[np.ndarray]]:
-        """Downscale + detect + encode. Shared by the primary frame and every
-        extra burst frame below so both go through the exact same pipeline."""
-        small = cv2.resize(frame, (0, 0), fx=config.FRAME_RESIZE_SCALE, fy=config.FRAME_RESIZE_SCALE)
-        rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+        """
+        Detect on a downscaled copy, encode from the full-resolution frame.
+        Shared by the primary frame and every extra burst frame below so both
+        go through the exact same pipeline.
+
+        Why split it: FINDING a face is the expensive part, so it runs on the
+        small image (see FRAME_RESIZE_SCALE). But the 128-d encoding is what
+        actually decides who someone is, and computing it from a tiny
+        image throws away most of the detail the network needs -- a face that
+        is only ~50px wide after downscaling yields a noticeably noisier
+        vector than the same face at native resolution. Encoding is cheap
+        relative to detection (it only looks at the face box, not the whole
+        frame), so we feed it the ORIGINAL pixels with the boxes scaled back
+        up.
+
+        Returns locations in DOWNSCALED coordinates (that's what
+        _closest_sighting and _save_face_crop expect) and encodings computed
+        at full resolution.
+        """
+        rgb_full = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        rgb_small = cv2.resize(
+            rgb_full, (0, 0), fx=config.FRAME_RESIZE_SCALE, fy=config.FRAME_RESIZE_SCALE
+        )
         locations = face_recognition.face_locations(rgb_small)
         if not locations:
             return [], []
-        encodings = face_recognition.face_encodings(rgb_small, locations)
+
+        full_locations = [self._upscale_location(loc, rgb_full.shape) for loc in locations]
+        encodings = face_recognition.face_encodings(rgb_full, full_locations)
         return locations, encodings
 
     def _process_frame(self, frame: np.ndarray):
@@ -365,17 +449,22 @@ class FaceEngine:
         used to log "closest known match was 0.58 away" on unknown-face log
         entries, which is handy for tuning KNOWN_USER_TOLERANCE later.
         """
-        if not self._known_sample_encodings:
+        # ONE read of the shared cache; everything below uses this local
+        # snapshot, so a concurrent reload_known_users() (operator registers,
+        # edits or deletes a member) can never hand us encodings from one
+        # version and user_ids from another
+        known = self._known
+        if known.encodings is None or len(known.user_ids) == 0:
             return None, None
 
         best_user_id, best_distance = None, None
         for encoding in encodings:
-            distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
+            distances = face_recognition.face_distance(known.encodings, encoding)
             idx = int(np.argmin(distances))
             distance = float(distances[idx])
             if best_distance is None or distance < best_distance:
                 best_distance = distance
-                best_user_id = self._known_sample_user_ids[idx]
+                best_user_id = known.user_ids[idx]
 
         if best_distance is not None and best_distance <= config.KNOWN_USER_TOLERANCE:
             return best_user_id, best_distance
@@ -388,18 +477,20 @@ class FaceEngine:
         entry (see PENDING_DEDUP_MAX_SAMPLES), not just its original encoding,
         so gradual pose/expression drift doesn't break the match.
         """
-        if not self._pending_cache:
-            return None
         now = datetime.now(timezone.utc)
 
+        # copy what we need while holding the lock (cheap: just references),
+        # then do the actual distance math OUTSIDE it so the request threads
+        # calling reload_pending_queue() are never stuck waiting on numpy
         flat_ids: list[int] = []
         flat_encodings: list[np.ndarray] = []
-        for p in self._pending_cache:
-            if (now - datetime.fromisoformat(p["last_seen"])).total_seconds() > config.PENDING_DEDUP_WINDOW_SECONDS:
-                continue
-            for sample in p["encodings"]:
-                flat_ids.append(p["id"])
-                flat_encodings.append(sample)
+        with self._pending_lock:
+            for p in self._pending_cache:
+                if (now - datetime.fromisoformat(p["last_seen"])).total_seconds() > config.PENDING_DEDUP_WINDOW_SECONDS:
+                    continue
+                for sample in p["encodings"]:
+                    flat_ids.append(p["id"])
+                    flat_encodings.append(sample)
 
         if not flat_encodings:
             return None
@@ -416,32 +507,37 @@ class FaceEngine:
         # better-framed) sample, so registration later matches off the best
         # available snapshot rather than whatever the very first glance looked like
         blob = encoding_to_blob(encoding)
-        with db_cursor(commit=True) as cur:
-            cur.execute(
-                "UPDATE pending_queue SET last_seen_at=?, encoding=? WHERE id=?",
-                (now, blob, pending_id),
-            )
-        for p in self._pending_cache:
-            if p["id"] == pending_id:
-                p["last_seen"] = now
-                p["encodings"].append(encoding)
-                if len(p["encodings"]) > config.PENDING_DEDUP_MAX_SAMPLES:
-                    p["encodings"] = p["encodings"][-config.PENDING_DEDUP_MAX_SAMPLES:]
-                break
+        with self._pending_lock:
+            with db_cursor(commit=True) as cur:
+                cur.execute(
+                    "UPDATE pending_queue SET last_seen_at=?, encoding=? WHERE id=?",
+                    (now, blob, pending_id),
+                )
+            for p in self._pending_cache:
+                if p["id"] == pending_id:
+                    p["last_seen"] = now
+                    p["encodings"].append(encoding)
+                    if len(p["encodings"]) > config.PENDING_DEDUP_MAX_SAMPLES:
+                        p["encodings"] = p["encodings"][-config.PENDING_DEDUP_MAX_SAMPLES:]
+                    break
 
     def _enqueue_new_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray) -> int:
         now = _now_iso()
-        photo_path = self._save_face_crop(full_frame, location_small)
+        photo_path = self._save_face_crop(full_frame, location_small)  # disk I/O: keep outside the lock
 
-        with db_cursor(commit=True) as cur:
-            cur.execute(
-                """INSERT INTO pending_queue (encoding, photo_path, first_seen_at, last_seen_at, status)
-                   VALUES (?, ?, ?, ?, 'pending')""",
-                (encoding_to_blob(encoding), str(photo_path), now, now),
-            )
-            new_id = cur.lastrowid
-
-        self._pending_cache.append({"id": new_id, "encodings": [encoding], "last_seen": now})
+        # INSERT + cache append must be atomic w.r.t. reload_pending_queue():
+        # if a reload read the table just BEFORE our insert and swapped the
+        # cache just AFTER our append, this face would vanish from the cache
+        # and the same person would be enqueued again on the next frame
+        with self._pending_lock:
+            with db_cursor(commit=True) as cur:
+                cur.execute(
+                    """INSERT INTO pending_queue (encoding, photo_path, first_seen_at, last_seen_at, status)
+                       VALUES (?, ?, ?, ?, 'pending')""",
+                    (encoding_to_blob(encoding), str(photo_path), now, now),
+                )
+                new_id = cur.lastrowid
+            self._pending_cache.append({"id": new_id, "encodings": [encoding], "last_seen": now})
 
         self._broadcast_soon({
             "event": "new_pending",
@@ -453,12 +549,12 @@ class FaceEngine:
         return new_id
 
     def _save_face_crop(self, full_frame: np.ndarray, location_small: tuple):
-        top, right, bottom, left = location_small
-        scale = int(round(1 / config.FRAME_RESIZE_SCALE))
-        top, right, bottom, left = top * scale, right * scale, bottom * scale, left * scale
+        # same mapping the encoder uses, so the saved photo and the encoding
+        # are guaranteed to be of the same face box
+        h, w = full_frame.shape[:2]
+        top, right, bottom, left = self._upscale_location(location_small, full_frame.shape)
 
         pad = 20
-        h, w = full_frame.shape[:2]
         top, left = max(0, top - pad), max(0, left - pad)
         bottom, right = min(h, bottom + pad), min(w, right + pad)
         crop = full_frame[top:bottom, left:right]

@@ -20,8 +20,18 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", str(BASE_DIR)))
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "0"))  # index passed to cv2.VideoCapture
 PROCESS_EVERY_N_FRAMES = 5       # only run face detection on 1 out of every N grabbed
                                   # frames -> keeps CPU usage sane on a normal PC
-FRAME_RESIZE_SCALE = 0.25        # frame is downscaled by this factor before detection
-                                  # (4x smaller frame ~= 16x faster HOG/CNN detection)
+FRAME_RESIZE_SCALE = 0.25        # frame is downscaled by this factor before FINDING faces
+                                  # (4x smaller frame ~= 16x faster HOG/CNN detection).
+                                  # Only detection uses the small copy: the 128-d encoding is
+                                  # computed from the full-resolution frame (see
+                                  # FaceEngine._detect), so lowering this trades away detection
+                                  # range/small faces, NOT recognition accuracy.
+                                  # Measured once with real dlib on a 640x480 frame at 0.25: a
+                                  # face ~120px wide was detected, ~80px was not (one test face,
+                                  # so treat as a ballpark, not a guarantee). If people are only
+                                  # picked up when standing very close, raise this (e.g. 0.5)
+                                  # -- costs more CPU per processed frame, and note detection
+                                  # cost grows roughly with the square of the scale.
 
 # ---------------------------------------------------------------------------
 # Face matching
