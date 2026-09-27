@@ -82,11 +82,37 @@ CREATE TABLE IF NOT EXISTS recognition_log (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Small generic key/value store for things that aren't "a member" or "an
+-- attendance event" -- right now just the manager's password hash (see
+-- auth.py). Kept as its own table instead of a bunch of one-off tables so
+-- future single-value settings don't need a new CREATE TABLE + migration each time.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_pending_status       ON pending_queue(status);
 CREATE INDEX IF NOT EXISTS idx_attendance_user      ON attendance_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_face_samples_user    ON member_face_samples(user_id);
 CREATE INDEX IF NOT EXISTS idx_recognition_log_id   ON recognition_log(id DESC);
+CREATE INDEX IF NOT EXISTS idx_users_phone          ON registered_users(phone);
 """
+
+
+def get_setting(key: str) -> str | None:
+    with db_cursor() as cur:
+        cur.execute("SELECT value FROM app_settings WHERE key=?", (key,))
+        row = cur.fetchone()
+    return row["value"] if row else None
+
+
+def set_setting(key: str, value: str) -> None:
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
 
 
 def get_raw_connection() -> sqlite3.Connection:

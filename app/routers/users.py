@@ -1,13 +1,16 @@
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from .. import auth
 from ..database import db_cursor
 from ..models import AttendanceEvent, ManualAttendanceRequest, RegisteredUserOut, UpdateUserRequest
 from ..ws_manager import manager
 
-router = APIRouter(prefix="/api", tags=["users"])
+# Every endpoint here is manager-only (member data management) -- the member
+# panel gets its own separate, read-only "my own data" endpoints later.
+router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.require_manager)])
 
 _USER_WITH_ATTENDANCE_SELECT = """
     SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type

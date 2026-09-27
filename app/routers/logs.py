@@ -6,13 +6,15 @@ FaceEngine._maybe_log_recognition (see face_engine.py) and pushed live over
 the existing /ws/queue WebSocket as a "recognition_seen" event -- this
 endpoint only serves the initial/backfill list when the panel is opened.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from .. import config
+from .. import auth, config
 from ..database import db_cursor
 from ..models import RecognitionLogEntry
 
-router = APIRouter(prefix="/api/recognition-log", tags=["recognition-log"])
+router = APIRouter(
+    prefix="/api/recognition-log", tags=["recognition-log"], dependencies=[Depends(auth.require_manager)]
+)
 
 
 @router.get("", response_model=list[RecognitionLogEntry])

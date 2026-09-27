@@ -3,9 +3,9 @@ from pathlib import Path
 
 import numpy as np
 import face_recognition
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import config
+from .. import auth, config
 from ..database import db_cursor, generate_unique_membership_code
 from ..face_engine import add_face_sample, blob_to_encoding
 from ..models import (
@@ -17,7 +17,7 @@ from ..models import (
 )
 from ..ws_manager import manager
 
-router = APIRouter(prefix="/api/queue", tags=["queue"])
+router = APIRouter(prefix="/api/queue", tags=["queue"], dependencies=[Depends(auth.require_manager)])
 
 
 def _pending_row_to_item(row) -> PendingItem:

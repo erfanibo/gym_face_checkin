@@ -65,3 +65,25 @@ class AttendanceEvent(BaseModel):
     full_name: str
     event_type: str
     checkin_at: str
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+class ManagerLoginRequest(BaseModel):
+    password: str = Field(..., min_length=1)
+
+
+class MemberLoginRequest(BaseModel):
+    phone: str = Field(..., min_length=3, description="همان شماره‌ای که هنگام ثبت‌نام ثبت شده")
+    membership_code: str = Field(..., min_length=1, description="کد عضویت (روی رسید/پیامک ثبت‌نام)")
+
+
+class ChangeManagerPasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=4, description="حداقل ۴ کاراکتر")
+
+
+class AuthIdentity(BaseModel):
+    role: Optional[str] = None  # 'manager' | 'member' | None
+    user_id: Optional[int] = None

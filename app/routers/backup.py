@@ -14,10 +14,9 @@ backup can still be recovered from manually -- this endpoint does not ask
 for confirmation itself, that's the frontend's job (a plain browser confirm()
 before the upload is even sent).
 
-There is no authentication anywhere else in this app (see the rest of
-app/routers/), so this endpoint doesn't add any either -- consistent with the
-rest of the API, not a gap specific to backups. Same physical/network trust
-model as everything else here.
+Manager-only, like the rest of the settings/management API (see auth.py) --
+a restore wipes the live database, so this is one of the most important
+endpoints to keep behind a login.
 """
 import shutil
 import tempfile
@@ -25,15 +24,17 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
+
+from .. import auth
 
 from .. import config
 from ..database import backup_database_to, close_connection, init_db
 from ..ws_manager import manager
 
-router = APIRouter(prefix="/api/backup", tags=["backup"])
+router = APIRouter(prefix="/api/backup", tags=["backup"], dependencies=[Depends(auth.require_manager)])
 
 
 @router.get("")

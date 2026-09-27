@@ -118,6 +118,28 @@ WEBHOOK_MAX_RETRIES = int(os.environ.get("WEBHOOK_MAX_RETRIES", "3"))
 WEBHOOK_RETRY_DELAY_SECONDS = float(os.environ.get("WEBHOOK_RETRY_DELAY_SECONDS", "2"))
 
 # ---------------------------------------------------------------------------
+# Auth / sessions
+# ---------------------------------------------------------------------------
+# Signs the session cookie (see main.py's SessionMiddleware). MUST be set to a
+# fixed value via env in Docker/production -- if left empty, a random key is
+# generated per process start, which silently logs everyone out on every
+# restart/redeploy. Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "").strip()
+if not SESSION_SECRET_KEY:
+    import secrets as _secrets
+    SESSION_SECRET_KEY = _secrets.token_hex(32)
+
+# How long a login (manager or member) stays valid before the cookie expires
+# and the person has to log in again.
+SESSION_MAX_AGE_SECONDS = int(os.environ.get("SESSION_MAX_AGE_SECONDS", str(60 * 60 * 24 * 30)))  # 30 days
+
+# Seeded as the manager's password ONLY on first-ever run (when no password
+# has been set yet in app_settings) -- change it from the Settings tab right
+# after first login. Overriding this env var later has NO effect once a
+# password already exists in the database.
+MANAGER_INITIAL_PASSWORD = os.environ.get("MANAGER_INITIAL_PASSWORD", "").strip() or "changeme"
+
+# ---------------------------------------------------------------------------
 # Storage (all under DATA_DIR so a single volume mount persists everything)
 # ---------------------------------------------------------------------------
 STATIC_DIR = DATA_DIR / "static"

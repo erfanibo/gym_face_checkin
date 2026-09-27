@@ -10,6 +10,15 @@ services:
       - CAMERA_INDEX=0
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      # Fixed session-signing key -- REQUIRED so logins survive a container
+      # restart/rebuild. Generate once with:
+      #   python -c "import secrets; print(secrets.token_hex(32))"
+      # and put the result in a .env file next to this compose file.
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:?SESSION_SECRET_KEY must be set in .env}
+      # Only used the very first time the app runs (before any password
+      # exists in the database). Change it from the Settings tab after
+      # first login, then this value stops mattering.
+      - MANAGER_INITIAL_PASSWORD=${MANAGER_INITIAL_PASSWORD:-changeme}
     volumes:
       - ./data:/app/data
     devices:

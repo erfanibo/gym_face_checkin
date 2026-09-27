@@ -195,14 +195,45 @@
   .modal-actions { display: flex; gap: 8px; margin-top: 6px; }
   .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); flex: 1; }
   .error-msg { color: var(--danger); font-size: 12px; min-height: 14px; }
+
+  /* login screen */
+  .login-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  .login-card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; width: 100%; max-width: 360px;
+    padding: 30px 26px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .login-card h1 { font-size: 18px; margin: 0; text-align: center; }
+  .login-card h1 span { display: block; color: var(--muted); font-weight: 400; font-size: 13px; margin-top: 6px; }
+  .logout-btn { margin-right: 14px; }
 </style>
 </head>
 <body>
 <div class="toast-container" id="toastContainer"></div>
 
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
+    <div class="field">
+      <label>رمز عبور مدیر</label>
+      <input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter') submitLogin()" />
+    </div>
+    <div class="error-msg" id="loginError"></div>
+    <button class="btn-primary" onclick="submitLogin()">ورود</button>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none">
 <header>
   <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
-  <div class="status"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>
+  <div class="status">
+    <span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span>
+    <button class="btn-secondary btn-sm logout-btn" onclick="logout()">خروج</button>
+  </div>
 </header>
 
 <main>
@@ -257,8 +288,26 @@
       <input type="file" id="restoreFileInput" accept=".zip" style="display:none" onchange="restoreBackup(event)" />
     </div>
     <div class="error-msg" id="restoreStatusMsg"></div>
+
+    <div class="settings-divider"></div>
+
+    <div class="section-title"><h2>🔑 تغییر رمز عبور</h2></div>
+    <p class="settings-hint">پیشنهاد می‌شود همین اول کار، رمز پیش‌فرض را عوض کنید.</p>
+    <div class="field">
+      <label>رمز فعلی</label>
+      <input id="currentPassword" type="password" />
+    </div>
+    <div class="field">
+      <label>رمز جدید (حداقل ۴ کاراکتر)</label>
+      <input id="newPassword" type="password" />
+    </div>
+    <div class="error-msg" id="passwordChangeMsg"></div>
+    <div class="settings-actions">
+      <button class="btn-primary" onclick="submitPasswordChange()">ذخیره رمز جدید</button>
+    </div>
   </div>
 </main>
+</div>
 
 <div class="overlay" id="overlay">
   <div class="modal">
@@ -322,6 +371,108 @@ let activeTab = 'queue';
 let restoringNow = false; // see restoreBackup() + the 'backup_restored' WS handler below
 const pendingItems = new Map(); // id -> item data, kept in sync with server
 let members = []; // loaded lazily the first time the "اعضا" tab is opened
+let appStarted = false; // true once loadPending()/connectWs() have run for this login
+
+// ---- auth ----
+// Any fetch anywhere in this file that comes back 401 means the session
+// expired (or was never valid) -- bounce straight to the login screen
+// instead of letting every caller handle it separately.
+const _rawFetch = window.fetch.bind(window);
+window.fetch = async function (...args) {
+  const res = await _rawFetch(...args);
+  if (res.status === 401 && appStarted) {
+    appStarted = false;
+    showLoginScreen('نشست شما منقضی شده. دوباره وارد شوید.');
+  }
+  return res;
+};
+
+async function checkAuth() {
+  const res = await fetch(`${API_BASE}/api/auth/me`);
+  const data = await res.json().catch(() => ({ role: null }));
+  if (data.role === 'manager') {
+    showApp();
+  } else {
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen(message) {
+  document.getElementById('appRoot').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginError').textContent = message || '';
+  const passwordInput = document.getElementById('loginPassword');
+  passwordInput.value = '';
+  passwordInput.focus();
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'block';
+  if (!appStarted) {
+    appStarted = true;
+    loadPending();
+    connectWs();
+  }
+}
+
+async function submitLogin() {
+  const errorEl = document.getElementById('loginError');
+  errorEl.textContent = '';
+  const password = document.getElementById('loginPassword').value;
+  if (!password) {
+    errorEl.textContent = 'رمز عبور را وارد کنید.';
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/api/auth/manager/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = err.detail || 'رمز عبور اشتباه است.';
+    return;
+  }
+  showApp();
+}
+
+async function logout() {
+  await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+  window.location.reload();
+}
+
+async function submitPasswordChange() {
+  const current_password = document.getElementById('currentPassword').value;
+  const new_password = document.getElementById('newPassword').value;
+  const msgEl = document.getElementById('passwordChangeMsg');
+  msgEl.style.color = 'var(--danger)';
+  msgEl.textContent = '';
+
+  if (!current_password || new_password.length < 4) {
+    msgEl.textContent = 'رمز فعلی را وارد کنید و رمز جدید حداقل ۴ کاراکتر باشد.';
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/api/auth/manager/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password, new_password }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    msgEl.textContent = err.detail || 'تغییر رمز انجام نشد.';
+    return;
+  }
+
+  document.getElementById('currentPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  msgEl.style.color = 'var(--accent)';
+  msgEl.textContent = 'رمز عبور با موفقیت تغییر کرد.';
+}
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -805,8 +956,7 @@ function connectWs() {
   };
 }
 
-loadPending();
-connectWs();
+checkAuth();
 </script>
 
 </body>
