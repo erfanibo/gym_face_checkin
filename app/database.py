@@ -82,6 +82,26 @@ CREATE TABLE IF NOT EXISTS recognition_log (
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- The member's current workout plan, as an ordered list of exercises
+-- ("todo list" style: name + sets + reps, optional note). Only ONE plan
+-- exists per member at a time, by design -- saving a new plan from the
+-- admin panel deletes every existing row for that user_id and inserts the
+-- new list in one go (see routers/workouts.py, added in a later step), it
+-- never diffs/edits individual rows from the admin side. is_done lets the
+-- member check an item off as they go; the manager's next save always
+-- resets the whole list anyway, so there's no "undo a check" endpoint needed.
+CREATE TABLE IF NOT EXISTS workout_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES registered_users(id),
+    position       INTEGER NOT NULL,       -- display order, 0-based, set by the admin panel
+    exercise_name  TEXT NOT NULL,
+    sets           INTEGER NOT NULL,
+    reps           TEXT NOT NULL,           -- TEXT not INTEGER: trainers write ranges too, e.g. "8-12" or "تا ناتوانی"
+    notes          TEXT,                    -- optional, e.g. weight or form cue
+    is_done        INTEGER NOT NULL DEFAULT 0,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Small generic key/value store for things that aren't "a member" or "an
 -- attendance event" -- right now just the manager's password hash (see
 -- auth.py). Kept as its own table instead of a bunch of one-off tables so
@@ -96,6 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_attendance_user      ON attendance_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_face_samples_user    ON member_face_samples(user_id);
 CREATE INDEX IF NOT EXISTS idx_recognition_log_id   ON recognition_log(id DESC);
 CREATE INDEX IF NOT EXISTS idx_users_phone          ON registered_users(phone);
+CREATE INDEX IF NOT EXISTS idx_workout_items_user   ON workout_items(user_id, position);
 """
 
 

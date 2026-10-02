@@ -99,9 +99,10 @@ async def delete_user(user_id: int, request: Request):
     """
     Permanently removes a member: their registration row, their attendance
     history, all of their stored face samples (member_face_samples), all of
-    their recognition-log rows, and (if any) the historical pending_queue row
-    that points at them — all deleted in one go because attendance_log.
-    user_id, member_face_samples.user_id, recognition_log.user_id, and
+    their recognition-log rows, their workout plan (workout_items), and (if
+    any) the historical pending_queue row that points at them — all deleted
+    in one go because attendance_log.user_id, member_face_samples.user_id,
+    recognition_log.user_id, workout_items.user_id, and
     pending_queue.registered_user_id are foreign keys, and foreign_keys=ON is
     enabled, so the parent row can't be deleted while children still
     reference it.
@@ -116,6 +117,7 @@ async def delete_user(user_id: int, request: Request):
         cur.execute("DELETE FROM attendance_log WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM member_face_samples WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM recognition_log WHERE user_id=?", (user_id,))
+        cur.execute("DELETE FROM workout_items WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM pending_queue WHERE registered_user_id=?", (user_id,))
         cur.execute("DELETE FROM registered_users WHERE id=?", (user_id,))
 
