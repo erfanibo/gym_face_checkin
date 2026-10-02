@@ -87,3 +87,36 @@ class ChangeManagerPasswordRequest(BaseModel):
 class AuthIdentity(BaseModel):
     role: Optional[str] = None  # 'manager' | 'member' | None
     user_id: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# Workout plans
+# ---------------------------------------------------------------------------
+class WorkoutItemIn(BaseModel):
+    exercise_name: str = Field(..., min_length=1, description="نام حرکت")
+    sets: int = Field(..., ge=1, description="تعداد ست")
+    reps: str = Field(..., min_length=1, description="تعداد تکرار؛ متن است چون می‌تواند رِنج هم باشد، مثل «8-12»")
+    notes: Optional[str] = Field(None, description="توضیح اختیاری (وزن، نکته‌ی اجرا و ...)")
+
+
+class SaveWorkoutPlanRequest(BaseModel):
+    # The admin panel always sends the WHOLE list, in the order it should be
+    # shown — there's no per-item edit endpoint, see routers/workouts.py.
+    items: list[WorkoutItemIn] = Field(default_factory=list)
+
+
+class WorkoutItemOut(BaseModel):
+    id: int
+    position: int
+    exercise_name: str
+    sets: int
+    reps: str
+    notes: Optional[str]
+    is_done: bool
+
+
+class WorkoutPlanOut(BaseModel):
+    user_id: int
+    full_name: Optional[str] = None  # only filled in on the manager's view
+    updated_at: Optional[str] = None
+    items: list[WorkoutItemOut]

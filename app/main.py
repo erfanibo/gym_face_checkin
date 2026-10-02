@@ -10,7 +10,7 @@ from . import auth, config
 from .database import init_db
 from .face_engine import FaceEngine
 from .routers import auth as auth_router
-from .routers import backup, logs, queue, users
+from .routers import backup, logs, queue, users, workouts
 from .ws_manager import manager
 
 
@@ -54,6 +54,7 @@ app.include_router(queue.router)
 app.include_router(users.router)
 app.include_router(logs.router)
 app.include_router(backup.router)
+app.include_router(workouts.router)
 
 
 @app.websocket("/ws/queue")
