@@ -1,0 +1,14 @@
+# Normalize line endings in the repo to LF, regardless of which OS
+# (Windows push / Ubuntu VM pull) touched the file last. Without this,
+# the same line shows up as "changed" on both sides just because of
+# \r\n vs \n, causing merge conflicts on files nobody actually edited
+# differently (this is what happened with config.py / face_engine.py /
+# README.md).
+* text=auto eol=lf
+
+# Keep real binaries as-is (git would otherwise try to "fix" them too).
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.db binary
+*.sqlite binary
