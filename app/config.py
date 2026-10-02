@@ -153,3 +153,4 @@ DB_PATH = DATA_DIR / "gym_face.db"
 
 # frontend/ stays with the code (not user data), so it's addressed via BASE_DIR
 FRONTEND_DIR = BASE_DIR / "frontend"
+MEMBER_FRONTEND_DIR = BASE_DIR / "frontend_member"  # separate, member-only panel -- see routers/workouts.py

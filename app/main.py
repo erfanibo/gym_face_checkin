@@ -48,6 +48,7 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
 app.mount("/panel", StaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="panel")
+app.mount("/member", StaticFiles(directory=str(config.MEMBER_FRONTEND_DIR), html=True), name="member_panel")
 
 app.include_router(auth_router.router)
 app.include_router(queue.router)

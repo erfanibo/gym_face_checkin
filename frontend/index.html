@@ -196,6 +196,18 @@
   .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); flex: 1; }
   .error-msg { color: var(--danger); font-size: 12px; min-height: 14px; }
 
+  /* workout plan editor (admin side) */
+  .workout-rows-head, .workout-row {
+    display: grid; grid-template-columns: 2fr 60px 90px 1.4fr auto;
+    gap: 8px; align-items: center;
+  }
+  .workout-rows-head { font-size: 11px; color: var(--muted); padding: 0 2px; }
+  .workout-rows { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding: 2px; }
+  .workout-row input { padding: 8px 10px; font-size: 13px; }
+  .workout-row-actions { display: flex; gap: 2px; }
+  .workout-row-actions button { padding: 4px 7px; font-size: 11px; }
+  .workout-empty-hint { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
+
   /* login screen */
   .login-screen {
     position: fixed; inset: 0; background: var(--bg);
@@ -344,6 +356,22 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">انصراف</button>
       <button class="btn-primary" onclick="submitEdit()">ذخیره تغییرات</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="workoutOverlay">
+  <div class="modal" style="max-width:640px;">
+    <h3 id="workoutModalTitle">برنامه‌ی تمرینی</h3>
+    <div class="workout-rows-head">
+      <span>حرکت</span><span>ست</span><span>تکرار</span><span>یادداشت</span><span></span>
+    </div>
+    <div id="workoutItemsList" class="workout-rows"></div>
+    <button class="btn-secondary btn-sm" style="align-self:flex-start" onclick="addWorkoutRow()">+ افزودن حرکت</button>
+    <div class="error-msg" id="workoutModalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeWorkoutModal()">انصراف</button>
+      <button class="btn-primary" onclick="submitWorkoutPlan()">ذخیره‌ی برنامه</button>
     </div>
   </div>
 </div>
@@ -634,6 +662,118 @@ async function submitEdit() {
   closeEditModal();
 }
 
+// ---- workout plan editor (admin side) ----
+let activeWorkoutUserId = null;
+
+function escapeAttr(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function workoutRowHtml(item) {
+  const name = item ? escapeAttr(item.exercise_name) : '';
+  const sets = item ? item.sets : '';
+  const reps = item ? escapeAttr(item.reps) : '';
+  const notes = item && item.notes ? escapeAttr(item.notes) : '';
+  return `
+    <div class="workout-row">
+      <input type="text" class="w-name" placeholder="مثلاً اسکات" value="${name}" />
+      <input type="number" class="w-sets" min="1" placeholder="۴" value="${sets}" />
+      <input type="text" class="w-reps" placeholder="8-12" value="${reps}" />
+      <input type="text" class="w-notes" placeholder="یادداشت (اختیاری)" value="${notes}" />
+      <div class="workout-row-actions">
+        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, -1)" title="جابه‌جایی به بالا">▲</button>
+        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, 1)" title="جابه‌جایی به پایین">▼</button>
+        <button class="btn-sm btn-ghost" onclick="removeWorkoutRow(this)" title="حذف این حرکت">✕</button>
+      </div>
+    </div>`;
+}
+
+async function openWorkoutModal(userId, fullName) {
+  activeWorkoutUserId = userId;
+  document.getElementById('workoutModalTitle').textContent = `برنامه‌ی تمرینی — ${fullName}`;
+  document.getElementById('workoutModalError').textContent = '';
+  document.getElementById('workoutItemsList').innerHTML = '<div class="workout-empty-hint">در حال بارگذاری...</div>';
+  document.getElementById('workoutOverlay').classList.add('open');
+
+  const res = await fetch(`${API_BASE}/api/users/${userId}/workout`);
+  const list = document.getElementById('workoutItemsList');
+  if (!res.ok) {
+    list.innerHTML = '';
+    document.getElementById('workoutModalError').textContent = 'بارگذاری برنامه‌ی فعلی انجام نشد.';
+    return;
+  }
+  const data = await res.json();
+  list.innerHTML = data.items.length
+    ? data.items.map(workoutRowHtml).join('')
+    : '<div class="workout-empty-hint">هنوز حرکتی اضافه نشده — از دکمه‌ی «افزودن حرکت» شروع کنید.</div>';
+}
+
+function closeWorkoutModal() {
+  activeWorkoutUserId = null;
+  document.getElementById('workoutOverlay').classList.remove('open');
+}
+
+function addWorkoutRow() {
+  const list = document.getElementById('workoutItemsList');
+  const hint = list.querySelector('.workout-empty-hint');
+  if (hint) hint.remove();
+  list.insertAdjacentHTML('beforeend', workoutRowHtml(null));
+}
+
+function removeWorkoutRow(button) {
+  button.closest('.workout-row').remove();
+}
+
+function moveWorkoutRow(button, direction) {
+  const row = button.closest('.workout-row');
+  const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+  if (!sibling) return;
+  if (direction < 0) row.parentNode.insertBefore(row, sibling);
+  else row.parentNode.insertBefore(sibling, row);
+}
+
+async function submitWorkoutPlan() {
+  const errorEl = document.getElementById('workoutModalError');
+  errorEl.textContent = '';
+
+  const rows = [...document.querySelectorAll('#workoutItemsList .workout-row')];
+  const items = [];
+  for (const row of rows) {
+    const exercise_name = row.querySelector('.w-name').value.trim();
+    const setsRaw = row.querySelector('.w-sets').value.trim();
+    const reps = row.querySelector('.w-reps').value.trim();
+    const notes = row.querySelector('.w-notes').value.trim();
+
+    if (!exercise_name && !setsRaw && !reps && !notes) continue; // fully empty row -> just skip it
+
+    if (!exercise_name || !setsRaw || !reps) {
+      errorEl.textContent = 'برای هر حرکت، نام/ست/تکرار را کامل پر کنید (یا کامل خالی بگذارید تا نادیده گرفته شود).';
+      return;
+    }
+    const sets = parseInt(setsRaw, 10);
+    if (!Number.isInteger(sets) || sets < 1) {
+      errorEl.textContent = 'تعداد ست باید یک عدد صحیح و حداقل ۱ باشد.';
+      return;
+    }
+    items.push({ exercise_name, sets, reps, notes: notes || null });
+  }
+
+  const res = await fetch(`${API_BASE}/api/users/${activeWorkoutUserId}/workout`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = err.detail || 'ذخیره‌ی برنامه انجام نشد.';
+    return;
+  }
+
+  closeWorkoutModal();
+  showToast('برنامه‌ی تمرینی ذخیره شد.');
+}
+
 function statusBadge(member) {
   if (!member.last_event_type) return '<span class="member-status status-none">هنوز تردد ندارد</span>';
   if (member.last_event_type === 'in') return '<span class="member-status status-in">داخل باشگاه</span>';
@@ -666,6 +806,7 @@ function renderMembers() {
         <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
         <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
         <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
+        <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id}, ${JSON.stringify(m.full_name)})">برنامه‌ی تمرینی</button>
         <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
       </div>
     </div>
