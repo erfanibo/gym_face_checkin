@@ -688,9 +688,11 @@ function workoutRowHtml(item) {
     </div>`;
 }
 
-async function openWorkoutModal(userId, fullName) {
+async function openWorkoutModal(userId) {
+  const member = members.find(m => m.id === userId);
+  if (!member) return;
   activeWorkoutUserId = userId;
-  document.getElementById('workoutModalTitle').textContent = `برنامه‌ی تمرینی — ${fullName}`;
+  document.getElementById('workoutModalTitle').textContent = `برنامه‌ی تمرینی — ${member.full_name}`;
   document.getElementById('workoutModalError').textContent = '';
   document.getElementById('workoutItemsList').innerHTML = '<div class="workout-empty-hint">در حال بارگذاری...</div>';
   document.getElementById('workoutOverlay').classList.add('open');
@@ -793,7 +795,7 @@ function renderMembers() {
   const list = document.getElementById('memberList');
   list.innerHTML = filtered.map(m => `
     <div class="member-row">
-      <img src="${m.photo_url || ''}" alt="${m.full_name}" onerror="this.style.visibility='hidden'" />
+      <img src="${m.photo_url || ''}" alt="${escapeAttr(m.full_name)}" onerror="this.style.visibility='hidden'" />
       <div class="member-info">
         <div class="member-name">${m.full_name}</div>
         <div class="member-meta">
@@ -806,7 +808,7 @@ function renderMembers() {
         <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
         <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
         <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
-        <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id}, ${JSON.stringify(m.full_name)})">برنامه‌ی تمرینی</button>
+        <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
         <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
       </div>
     </div>
@@ -899,7 +901,7 @@ function renderAssignList() {
   const list = document.getElementById('assignList');
   list.innerHTML = filtered.map(m => `
     <div class="member-row" style="cursor:pointer" onclick="submitAssign(${m.id})">
-      <img src="${m.photo_url || ''}" alt="${m.full_name}" onerror="this.style.visibility='hidden'" />
+      <img src="${m.photo_url || ''}" alt="${escapeAttr(m.full_name)}" onerror="this.style.visibility='hidden'" />
       <div class="member-info">
         <div class="member-name">${m.full_name}</div>
         <div class="member-meta">${m.membership_code ? `کد: ${m.membership_code} · ` : ''}${m.phone || 'بدون شماره تماس'}</div>
