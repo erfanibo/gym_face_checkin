@@ -3,21 +3,28 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>پنل پذیرش | باشگاه</title>
+<title>باشگاه گلادیاتور | پنل مدیریت</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #12161c;
-    --panel: #1a2029;
-    --panel-2: #212936;
-    --line: #2b3444;
-    --text: #e7ebf1;
-    --muted: #8b95a7;
-    --accent: #3ddc97;
-    --accent-dim: #1f5b41;
+    --bg: #0b0e13;
+    --panel: #12161d;
+    --panel-2: #1a2029;
+    --line: #262d38;
+    --text: #e9edf3;
+    --muted: #8891a3;
+    --accent: #2fd48a;
+    --accent-dim: #163828;
     --warn: #f2a154;
     --danger: #e05656;
+
+    --c-dashboard: #7c6df0;      --c-dashboard-dim: #211f3d;
+    --c-reception: #2fd48a;      --c-reception-dim: #163828;
+    --c-members: #3f9bf2;        --c-members-dim: #16293f;
+    --c-finance: #eea13c;        --c-finance-dim: #3a2a12;
+    --c-reports: #c572ec;        --c-reports-dim: #2c1f3a;
+    --c-settings: #ef5d79;       --c-settings-dim: #3a1b22;
   }
   * { box-sizing: border-box; }
   body {
@@ -27,95 +34,156 @@
     color: var(--text);
     min-height: 100vh;
   }
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 28px;
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
-  }
-  header h1 { font-size: 18px; font-weight: 700; margin: 0; }
-  header h1 span { color: var(--muted); font-weight: 400; font-size: 13px; margin-right: 8px; }
-  .status {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 13px; color: var(--muted);
-  }
-  .dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: var(--danger);
-    box-shadow: 0 0 0 3px rgba(224,86,86,0.15);
-    transition: background .2s, box-shadow .2s;
-  }
-  .dot.live {
-    background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(61,220,151,0.15);
-  }
+  svg { display: block; }
 
-  main { padding: 26px 28px 60px; max-width: 1200px; margin: 0 auto; }
-  .section-title {
-    display: flex; align-items: baseline; gap: 10px;
-    margin: 0 0 16px;
+  /* ---------------------------------------------------------------- */
+  /* shared primitives (buttons, inputs, modal, toast, cards, badges) */
+  /* ---------------------------------------------------------------- */
+  button {
+    font-family: inherit; border: none; border-radius: 9px;
+    padding: 9px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: filter .15s, transform .05s, opacity .15s;
   }
-  .section-title h2 { font-size: 15px; margin: 0; color: var(--text); }
+  button:active { transform: scale(.97); }
+  button:disabled, button.is-disabled { opacity: .4; cursor: not-allowed; }
+  button:disabled:active, button.is-disabled:active { transform: none; }
+  .btn-primary { background: var(--accent); color: #07211a; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .btn-ghost { background: transparent; color: var(--danger); border: 1px solid rgba(224,86,86,0.35); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(224,86,86,0.08); }
+  .btn-sm { padding: 6px 11px; font-size: 12px; }
+  .btn-block { width: 100%; }
+
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 9px; padding: 10px 12px;
+    font-family: inherit; font-size: 14px;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+  .field { margin-bottom: 4px; }
+  .error-msg { color: var(--danger); font-size: 12px; min-height: 14px; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 18px; }
+
+  .section-title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 16px; }
+  .section-title h2 { font-size: 14.5px; margin: 0; }
   .count-badge {
     background: var(--accent-dim); color: var(--accent);
-    font-size: 12px; font-weight: 600;
-    padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  }
+  .block-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
+  .divider { border-top: 1px solid var(--line); margin: 30px 0; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(6,8,11,0.65);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+    padding: 20px;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; width: 100%; max-width: 380px;
+    padding: 22px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .modal img {
+    width: 96px; height: 96px; border-radius: 12px; object-fit: cover;
+    align-self: center; border: 1px solid var(--line);
+  }
+  .modal h3 { margin: 0; font-size: 16px; text-align: center; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .modal-actions > button { flex: 1; }
+
+  .toast-container {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 300; display: flex; flex-direction: column; gap: 8px;
+    width: 100%; max-width: 420px; padding: 0 16px;
+  }
+  .toast {
+    background: var(--panel); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 12px 18px; font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35); animation: toast-in .2s ease-out;
+  }
+  .toast b { color: var(--accent); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .empty {
+    padding: 44px 20px; text-align: center; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: 14px; font-size: 13.5px;
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 16px;
+  /* "not connected to backend yet" placeholder block */
+  .not-connected {
+    border: 1px dashed var(--line); border-radius: 14px;
+    padding: 42px 24px; text-align: center; color: var(--muted);
   }
+  .not-connected .nc-icon {
+    width: 42px; height: 42px; margin: 0 auto 16px; color: var(--muted); opacity: .75;
+  }
+  .not-connected .nc-icon svg { width: 100%; height: 100%; }
+  .not-connected .nc-title { color: var(--text); font-weight: 600; font-size: 14px; margin-bottom: 7px; }
+  .not-connected .nc-text { font-size: 12.8px; line-height: 1.9; max-width: 440px; margin: 0 auto; }
+
+  /* stat cards (dashboard) */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .stat-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 16px; position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 3px;
+    background: var(--acc, var(--accent));
+  }
+  .stat-card .stat-value { font-size: 27px; font-weight: 700; line-height: 1; }
+  .stat-card .stat-label { font-size: 12.5px; color: var(--muted); margin-top: 7px; }
+
+  /* data table shell (reports / finance) */
+  .data-table-wrap { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th {
+    text-align: right; padding: 12px 14px; color: var(--muted); font-size: 11.5px;
+    font-weight: 600; background: var(--panel-2); border-bottom: 1px solid var(--line);
+  }
+  .data-table td { padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table .table-empty-row td { text-align: center; color: var(--muted); padding: 40px; }
+
+  /* toggle switch (used only on non-wired "اعلان‌ها" placeholder) */
+  .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+  .switch-row:last-child { border-bottom: none; }
+  .switch-row .label-main { font-size: 13.5px; font-weight: 600; }
+  .switch-row .label-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .switch { position: relative; width: 40px; height: 23px; flex-shrink: 0; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch .track {
+    position: absolute; inset: 0; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 999px; transition: .15s; cursor: pointer;
+  }
+  .switch .thumb {
+    position: absolute; width: 17px; height: 17px; border-radius: 50%; background: var(--muted);
+    top: 2px; right: 3px; transition: .15s; pointer-events: none;
+  }
+  .switch input:checked + .track { background: var(--accent-dim); border-color: var(--accent); }
+  .switch input:checked ~ .thumb { background: var(--accent); right: 20px; }
+
+  /* queue grid (reception) */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
   .card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    overflow: hidden;
-    display: flex; flex-direction: column;
-    animation: appear .25s ease-out;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    overflow: hidden; display: flex; flex-direction: column; animation: appear .25s ease-out;
   }
-  @keyframes appear { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .card img {
-    width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
-    background: #0d1015; display: block;
-  }
+  .card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #0d1015; display: block; }
   .card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
   .waited { font-size: 12px; color: var(--muted); }
   .card-actions { display: flex; flex-direction: column; gap: 8px; }
   .card-actions-row { display: flex; gap: 8px; }
   .card-actions-row > button { flex: 1; }
-  button {
-    font-family: inherit; border: none; border-radius: 9px;
-    padding: 8px 10px; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: filter .15s, transform .05s;
-  }
-  button:active { transform: scale(.97); }
-  .btn-primary { background: var(--accent); color: #08261a; flex: 1; }
-  .btn-primary:hover { filter: brightness(1.08); }
-  .btn-ghost { background: transparent; color: var(--danger); border: 1px solid rgba(224,86,86,0.35); }
-  .btn-ghost:hover { background: rgba(224,86,86,0.08); }
+  .card-actions > .btn-primary { width: 100%; }
 
-  .empty {
-    padding: 50px 20px; text-align: center; color: var(--muted);
-    border: 1px dashed var(--line); border-radius: 14px; font-size: 14px;
-  }
-
-  .tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
-  .tab-btn {
-    background: transparent; color: var(--muted); border-radius: 9px 9px 0 0;
-    padding: 10px 18px; font-size: 14px; border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-  }
-  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-
-  .search-box { margin-bottom: 16px; }
-  .search-box input { max-width: 320px; }
-
+  /* member rows */
+  .search-box { margin-bottom: 16px; max-width: 360px; }
   .member-list { display: flex; flex-direction: column; gap: 10px; }
   .member-row {
     display: flex; align-items: center; gap: 14px;
@@ -133,24 +201,10 @@
   .status-in { background: var(--accent-dim); color: var(--accent); }
   .status-out { background: #3a2430; color: var(--warn); }
   .status-none { background: var(--panel-2); color: var(--muted); }
-
   .member-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-  .btn-sm { padding: 6px 10px; font-size: 12px; }
 
-  .toast-container {
-    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
-    z-index: 100; display: flex; flex-direction: column; gap: 8px;
-    width: 100%; max-width: 420px; padding: 0 16px;
-  }
-  .toast {
-    background: var(--panel); border: 1px solid var(--accent);
-    border-radius: 10px; padding: 12px 18px; font-size: 13px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35); animation: toast-in .2s ease-out;
-  }
-  .toast b { color: var(--accent); }
-  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-  .feed { margin-top: 34px; }
-  .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  /* live feed + recognition log */
+  .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
   .feed-item {
     display: flex; justify-content: space-between; gap: 10px;
     font-size: 13px; padding: 9px 12px;
@@ -158,43 +212,8 @@
   }
   .feed-item b { color: var(--text); font-weight: 600; }
   .feed-item.log-item { animation: appear .2s ease-out; }
-  .feed-item.log-item .dist { color: var(--muted); font-size: 11px; }
   .feed-item.log-unknown { border-right: 3px solid var(--warn); }
   .feed-item.log-unknown b { color: var(--warn); }
-
-  .settings-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
-  .settings-divider { border-top: 1px solid var(--line); margin: 30px 0; }
-  .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .settings-actions button { padding: 10px 18px; }
-
-  /* modal */
-  .overlay {
-    position: fixed; inset: 0; background: rgba(6,8,11,0.65);
-    display: none; align-items: center; justify-content: center; z-index: 50;
-    padding: 20px;
-  }
-  .overlay.open { display: flex; }
-  .modal {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 16px; width: 100%; max-width: 380px;
-    padding: 22px; display: flex; flex-direction: column; gap: 14px;
-  }
-  .modal img {
-    width: 96px; height: 96px; border-radius: 12px; object-fit: cover;
-    align-self: center; border: 1px solid var(--line);
-  }
-  .modal h3 { margin: 0; font-size: 16px; text-align: center; }
-  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
-  input {
-    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
-    color: var(--text); border-radius: 9px; padding: 10px 12px;
-    font-family: inherit; font-size: 14px;
-  }
-  input:focus { outline: none; border-color: var(--accent); }
-  .field { margin-bottom: 4px; }
-  .modal-actions { display: flex; gap: 8px; margin-top: 6px; }
-  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); flex: 1; }
-  .error-msg { color: var(--danger); font-size: 12px; min-height: 14px; }
 
   /* workout plan editor (admin side) */
   .workout-rows-head, .workout-row {
@@ -208,7 +227,22 @@
   .workout-row-actions button { padding: 4px 7px; font-size: 11px; }
   .workout-empty-hint { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
 
-  /* login screen */
+  /* alert / info rows (dashboard) */
+  .alert-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 11px; background: var(--panel);
+    border: 1px solid var(--line); font-size: 13px;
+  }
+  .alert-row + .alert-row { margin-top: 8px; }
+  .alert-row .dot-mark { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .alert-row.warn .dot-mark { background: var(--warn); }
+  .alert-row.ok .dot-mark { background: var(--accent); }
+  .alert-row .alert-text { flex: 1; }
+  .alert-row .alert-text b { font-weight: 700; }
+
+  /* -------------------------------------------- */
+  /* login screen                                  */
+  /* -------------------------------------------- */
   .login-screen {
     position: fixed; inset: 0; background: var(--bg);
     display: none; align-items: center; justify-content: center;
@@ -217,19 +251,130 @@
   .login-card {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 16px; width: 100%; max-width: 360px;
-    padding: 30px 26px; display: flex; flex-direction: column; gap: 14px;
+    padding: 32px 26px; display: flex; flex-direction: column; gap: 14px;
+    align-items: center;
   }
-  .login-card h1 { font-size: 18px; margin: 0; text-align: center; }
+  .login-mark {
+    width: 52px; height: 52px; border-radius: 14px; background: var(--accent-dim);
+    color: var(--accent); display: flex; align-items: center; justify-content: center;
+    margin-bottom: 4px;
+  }
+  .login-mark svg { width: 28px; height: 28px; }
+  .login-card h1 { font-size: 18px; margin: 0 0 4px; text-align: center; width: 100%; }
   .login-card h1 span { display: block; color: var(--muted); font-weight: 400; font-size: 13px; margin-top: 6px; }
-  .logout-btn { margin-right: 14px; }
+  .login-card .field, .login-card .error-msg, .login-card button { width: 100%; }
+
+  /* -------------------------------------------- */
+  /* app shell: sidebar + content                 */
+  /* -------------------------------------------- */
+  .app-shell { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 266px; flex-shrink: 0; background: var(--panel);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .sidebar-brand {
+    padding: 20px 18px; display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--line); flex-shrink: 0;
+  }
+  .sidebar-brand .mark {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--accent-dim);
+    color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .sidebar-brand .mark svg { width: 21px; height: 21px; }
+  .sidebar-brand .name { font-size: 14.5px; font-weight: 700; }
+  .sidebar-brand .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .nav { flex: 1; overflow-y: auto; padding: 10px 10px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 10px 9px; border-radius: 10px; cursor: pointer;
+    font-size: 13.5px; font-weight: 600; color: var(--text); background: transparent;
+    border: none; text-align: right; font-family: inherit;
+  }
+  .nav-item:hover { background: var(--panel-2); }
+  .nav-item.active { background: var(--panel-2); }
+  .nav-item .icon-chip {
+    width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0; background: var(--acc-dim, var(--panel-2)); color: var(--acc, var(--muted));
+  }
+  .nav-item .icon-chip svg { width: 16px; height: 16px; }
+  .nav-item .chev { margin-right: auto; color: var(--muted); flex-shrink: 0; transition: transform .15s; }
+  .nav-item .chev svg { width: 13px; height: 13px; }
+  .nav-group.open > .nav-item .chev { transform: rotate(90deg); }
+
+  .nav-children {
+    display: none; flex-direction: column; gap: 1px;
+    margin: 3px 0 6px 24px; padding-right: 13px; border-right: 1px solid var(--line);
+  }
+  .nav-group.open > .nav-children { display: flex; }
+  .nav-child {
+    padding: 8px 10px; border-radius: 8px; font-size: 12.7px; color: var(--muted);
+    cursor: pointer; text-align: right; background: transparent; border: none;
+    width: 100%; font-family: inherit; font-weight: 500;
+  }
+  .nav-child:hover { background: var(--panel-2); color: var(--text); }
+  .nav-child.active { color: var(--text); background: var(--panel-2); font-weight: 600; box-shadow: inset -3px 0 0 var(--acc, var(--accent)); }
+  .nav-subchildren {
+    display: none; flex-direction: column; gap: 1px;
+    margin: 2px 0 4px 10px; padding-right: 11px; border-right: 1px solid var(--line);
+  }
+  .nav-subgroup.open > .nav-subchildren { display: flex; }
+  .nav-subgroup > .nav-child .chev { margin-right: auto; transition: transform .15s; }
+  .nav-subgroup > .nav-child .chev svg { width: 11px; height: 11px; }
+  .nav-subgroup.open > .nav-child .chev { transform: rotate(90deg); }
+  .nav-subgroup > .nav-child { display: flex; align-items: center; gap: 6px; }
+
+  .sidebar-footer { padding: 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
+  .nav-logout {
+    width: 100%; background: transparent; color: var(--muted); border: 1px solid var(--line);
+    padding: 10px; border-radius: 9px; font-size: 13px; font-weight: 600; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  }
+  .nav-logout:hover { background: var(--panel-2); color: var(--text); }
+  .nav-logout svg { width: 15px; height: 15px; }
+
+  .content { flex: 1; min-width: 0; height: 100vh; overflow-y: auto; }
+  .content-header {
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+    padding: 20px 30px 17px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .content-header .title-row { display: flex; align-items: center; gap: 12px; }
+  .content-header .accent-bar { width: 4px; height: 20px; border-radius: 3px; background: var(--acc, var(--accent)); flex-shrink: 0; }
+  .content-header h1 { font-size: 19px; margin: 0; font-weight: 700; }
+  .content-header .subtitle { color: var(--muted); font-size: 12.5px; margin-top: 5px; }
+  .content-header .header-actions { display: flex; align-items: center; gap: 10px; }
+  .ws-indicator { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px rgba(224,86,86,0.15); transition: background .2s, box-shadow .2s; }
+  .dot.live { background: var(--accent); box-shadow: 0 0 0 3px rgba(61,220,151,0.15); }
+
+  .content-body { padding: 24px 30px 70px; max-width: 1180px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  @media (max-width: 880px) {
+    .sidebar { width: 230px; }
+    .content-body, .content-header { padding-left: 18px; padding-right: 18px; }
+  }
 </style>
 </head>
 <body>
 <div class="toast-container" id="toastContainer"></div>
 
+<!-- ================= LOGIN ================= -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
+    <div class="login-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="4.5" cy="12" r="2"/><circle cx="19.5" cy="12" r="2"/>
+        <line x1="6.5" y1="12" x2="17.5" y2="12"/>
+        <line x1="4.5" y1="9" x2="4.5" y2="15"/><line x1="19.5" y1="9" x2="19.5" y2="15"/>
+      </svg>
+    </div>
+    <h1>باشگاه گلادیاتور <span>ورود به پنل مدیریت</span></h1>
     <div class="field">
       <label>رمز عبور مدیر</label>
       <input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter') submitLogin()" />
@@ -239,88 +384,481 @@
   </div>
 </div>
 
-<div id="appRoot" style="display:none">
-<header>
-  <h1>پنل پذیرش <span>| مدیریت ورود اعضا</span></h1>
-  <div class="status">
-    <span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span>
-    <button class="btn-secondary btn-sm logout-btn" onclick="logout()">خروج</button>
+<!-- ================= APP SHELL ================= -->
+<div id="appRoot" class="app-shell" style="display:none">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="4.5" cy="12" r="2"/><circle cx="19.5" cy="12" r="2"/>
+          <line x1="6.5" y1="12" x2="17.5" y2="12"/>
+          <line x1="4.5" y1="9" x2="4.5" y2="15"/><line x1="19.5" y1="9" x2="19.5" y2="15"/>
+        </svg>
+      </div>
+      <div>
+        <div class="name">باشگاه گلادیاتور</div>
+        <div class="sub">پنل مدیریت</div>
+      </div>
+    </div>
+    <nav class="nav" id="navTree"></nav>
+    <div class="sidebar-footer">
+      <button class="nav-logout" onclick="logout()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M10 12h10m0 0-3.5-3.5M20 12l-3.5 3.5"/>
+        </svg>
+        خروج از پنل
+      </button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <div class="content-header">
+      <div class="title-row">
+        <span class="accent-bar" id="pageAccentBar"></span>
+        <div>
+          <h1 id="pageTitle">داشبورد</h1>
+          <div class="subtitle" id="pageSubtitle">نمای کلی و آمار</div>
+        </div>
+      </div>
+      <div class="header-actions" id="pageHeaderActions"></div>
+    </div>
+
+    <div class="content-body">
+
+      <!-- ============ داشبورد ============ -->
+      <div class="page" data-page="dashboard" style="--acc:var(--c-dashboard)">
+        <div class="section-title"><h2>نمای کلی</h2></div>
+        <div class="stat-grid" id="dashboardStats" style="--acc:var(--c-dashboard)"></div>
+
+        <div class="divider"></div>
+        <div class="section-title"><h2>هشدارها و اعلان‌ها</h2></div>
+        <div id="dashboardAlerts"></div>
+
+        <div class="divider"></div>
+        <div class="section-title"><h2>وضعیت مالی</h2></div>
+        <div class="not-connected">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="7" width="18" height="13" rx="2.2"/><path d="M7 7V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V7"/><path d="M3 11h18"/><circle cx="16.3" cy="14.5" r="1.2"/>
+            </svg>
+          </div>
+          <div class="nc-title">وضعیت مالی هنوز به بک‌اند وصل نشده</div>
+          <div class="nc-text">به‌محض فعال‌شدن بخش «مالی و شهریه»، خلاصه‌ی درآمد و بدهی‌های این ماه همین‌جا نمایش داده می‌شود.</div>
+        </div>
+      </div>
+
+      <!-- ============ پذیرش: صف انتظار / ثبت چهره ============ -->
+      <div class="page" data-page="reception-queue" style="--acc:var(--c-reception)">
+        <div class="section-title">
+          <h2>افراد در انتظار ثبت‌نام</h2>
+          <span class="count-badge" id="pendingCount">0</span>
+        </div>
+        <div id="grid" class="grid"></div>
+        <div id="emptyState" class="empty" style="display:none">فعلاً کسی در صف پذیرش نیست. به محض شناسایی یک چهره‌ی جدید جلوی دوربین، اینجا نمایش داده می‌شود.</div>
+      </div>
+
+      <!-- ============ پذیرش: ثبت تردد (لاگ زنده) ============ -->
+      <div class="page" data-page="reception-checkin" style="--acc:var(--c-reception)">
+        <div class="section-title"><h2>ورودهای اخیر</h2></div>
+        <div id="feedList" class="feed-list"></div>
+        <div id="feedEmptyState" class="empty" style="display:none">هنوز تردد زنده‌ای در این جلسه ثبت نشده.</div>
+
+        <div class="divider"></div>
+        <div class="section-title">
+          <h2>لاگ شناسایی (شامل چهره‌های ناشناس)</h2>
+        </div>
+        <p class="block-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله یک خط ثبت می‌شود.</p>
+        <div id="recognitionLogList" class="feed-list"></div>
+        <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
+      </div>
+
+      <!-- ============ پذیرش: ورود/خروج اعضا ============ -->
+      <div class="page" data-page="reception-inout" style="--acc:var(--c-reception)">
+        <div class="section-title"><h2>ثبت دستی ورود / خروج</h2></div>
+        <p class="block-hint">برای زمانی که تشخیص چهره موجود نیست یا عضو بدون عبور از دوربین وارد/خارج می‌شود.</p>
+        <div class="search-box">
+          <input id="inoutSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderInOutList()" />
+        </div>
+        <div id="inoutList" class="member-list"></div>
+        <div id="inoutEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
+      </div>
+
+      <!-- ============ پذیرش > تنظیمات پذیرش: دوربین و دستگاه‌ها ============ -->
+      <div class="page" data-page="reception-settings-camera" style="--acc:var(--c-reception)">
+        <div class="not-connected">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+          </div>
+          <div class="nc-title">تنظیمات دوربین هنوز از پنل قابل تغییر نیست</div>
+          <div class="nc-text">فعلاً ایندکس دوربین از متغیر محیطی <code>CAMERA_INDEX</code> روی سرور خوانده می‌شود. وصل‌کردن این فرم به بک‌اند، گام بعدی است.</div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid">
+          <div class="field"><label>دوربین فعال</label><select disabled><option>دوربین پیش‌فرض سرور (CAMERA_INDEX=0)</option></select></div>
+          <div class="field"><label>کیفیت تصویر</label><select disabled><option>استاندارد</option></select></div>
+        </div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+        </div>
+      </div>
+
+      <!-- ============ پذیرش > تنظیمات پذیرش: رفتار ثبت تردد ============ -->
+      <div class="page" data-page="reception-settings-behavior" style="--acc:var(--c-reception)">
+        <p class="block-hint">این مقادیر هم‌اکنون از تنظیمات سرور خوانده می‌شوند (فقط نمایشی). تغییر آن‌ها از همین صفحه، گام بعدی است.</p>
+        <div class="form-grid">
+          <div class="field"><label>فاصله‌ی ثبت ورود/خروج یکسان (دقیقه)</label><input type="number" value="5" disabled /></div>
+          <div class="field"><label>دیبانس لاگ شناسایی (ثانیه)</label><input type="number" value="4" disabled /></div>
+          <div class="field"><label>پنجره‌ی آنتی‌اسپم صف انتظار (دقیقه)</label><input type="number" value="2" disabled /></div>
+          <div class="field"><label>حداکثر نمونه‌ی چهره به ازای هر عضو</label><input type="number" value="15" disabled /></div>
+        </div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+        </div>
+      </div>
+
+      <!-- ============ پذیرش > تنظیمات پذیرش: اعلان‌ها ============ -->
+      <div class="page" data-page="reception-settings-alerts" style="--acc:var(--c-reception)">
+        <p class="block-hint">این سوییچ‌ها فعلاً فقط نمایشی‌اند و به هیچ سرویس پیامکی/ایمیلی وصل نیستند.</p>
+        <div class="switch-row">
+          <div><div class="label-main">اعلان ورود/خروج اعضا</div><div class="label-sub">هر بار عضوی تردد کند</div></div>
+          <label class="switch"><input type="checkbox" checked /><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <div class="switch-row">
+          <div><div class="label-main">اعلان چهره‌ی ناشناس</div><div class="label-sub">وقتی یک چهره‌ی جدید در صف انتظار قرار می‌گیرد</div></div>
+          <label class="switch"><input type="checkbox" checked /><span class="track"></span><span class="thumb"></span></label>
+        </div>
+        <div class="switch-row">
+          <div><div class="label-main">اعلان پایان عضویت نزدیک</div><div class="label-sub">نیازمند بخش «مالی و شهریه»</div></div>
+          <label class="switch"><input type="checkbox" disabled /><span class="track"></span><span class="thumb"></span></label>
+        </div>
+      </div>
+
+      <!-- ============ اعضا: لیست / ویرایش ============ -->
+      <div class="page" data-page="members-list" style="--acc:var(--c-members)">
+        <div class="section-title">
+          <h2>اعضای ثبت‌شده</h2>
+          <span class="count-badge" id="memberCount">0</span>
+        </div>
+        <div class="search-box">
+          <input id="memberSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderMembers()" />
+        </div>
+        <div id="memberList" class="member-list"></div>
+        <div id="memberEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
+      </div>
+
+      <!-- ============ اعضا: افزودن عضو ============ -->
+      <div class="page" data-page="members-add" style="--acc:var(--c-members)">
+        <div class="not-connected" style="margin-bottom:22px;">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><line x1="17" y1="8" x2="17" y2="13"/><line x1="14.5" y1="10.5" x2="19.5" y2="10.5"/>
+            </svg>
+          </div>
+          <div class="nc-title">عضو جدید از طریق چهره ثبت می‌شود</div>
+          <div class="nc-text">ثبت‌نام واقعی با گرفتن عکس از صف انتظار پذیرش انجام می‌شود تا چهره‌ی عضو برای تشخیص بعدی ذخیره شود. این فرم برای افزودن دستی (بدون نیاز به ایستادن جلوی دوربین) هنوز به بک‌اند وصل نیست.</div>
+        </div>
+        <button class="btn-primary" onclick="goToPage('reception-queue')">برو به صف پذیرش</button>
+
+        <div class="divider"></div>
+        <div class="section-title"><h2>فرم افزودن دستی (غیرفعال)</h2></div>
+        <div class="form-grid">
+          <div class="field"><label>نام و نام خانوادگی</label><input type="text" placeholder="مثلاً: علی رضایی" disabled /></div>
+          <div class="field"><label>شماره تماس</label><input type="tel" placeholder="09xxxxxxxxx" disabled /></div>
+        </div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" disabled>ثبت عضو</button>
+        </div>
+      </div>
+
+      <!-- ============ اعضا: تمدید/پایان عضویت ============ -->
+      <div class="page" data-page="members-renew" style="--acc:var(--c-members)">
+        <p class="block-hint">انتخاب عضو و مشاهده‌ی فرم تمدید — هنوز به بک‌اند وصل نیست چون مفهوم «تاریخ پایان عضویت/پلن» در دیتابیس وجود ندارد.</p>
+        <div class="field" style="max-width:360px;">
+          <label>انتخاب عضو</label>
+          <select id="renewMemberSelect" onchange="renderRenewPanel()"><option value="">— انتخاب کنید —</option></select>
+        </div>
+        <div id="renewPanel" style="margin-top:18px; display:none;">
+          <div class="not-connected">
+            <div class="nc-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="17" rx="2.2"/><line x1="3" y1="9.5" x2="21" y2="9.5"/><line x1="7.5" y1="2" x2="7.5" y2="6"/><line x1="16.5" y1="2" x2="16.5" y2="6"/>
+              </svg>
+            </div>
+            <div class="nc-title" id="renewPanelName">—</div>
+            <div class="nc-text">تمدید عضویت برای این فرد هنوز در دیتابیس ثبت نمی‌شود.</div>
+          </div>
+          <div class="form-grid" style="margin-top:18px;">
+            <div class="field"><label>پلن عضویت</label><select disabled><option>ماهانه</option></select></div>
+            <div class="field"><label>تاریخ پایان جدید</label><input type="date" disabled /></div>
+          </div>
+          <div class="modal-actions" style="margin-top:14px; max-width:220px;">
+            <button class="btn-primary" disabled>ثبت تمدید</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ اعضا: جستجوی پیشرفته ============ -->
+      <div class="page" data-page="members-search" style="--acc:var(--c-members)">
+        <div class="section-title"><h2>جستجوی پیشرفته‌ی اعضا</h2></div>
+        <div class="form-grid" style="margin-bottom:18px;">
+          <div class="field">
+            <label>متن جستجو (نام، تلفن، کد عضویت)</label>
+            <input id="advSearchQuery" type="text" placeholder="..." oninput="renderAdvancedSearch()" />
+          </div>
+          <div class="field">
+            <label>وضعیت تردد</label>
+            <select id="advSearchStatus" onchange="renderAdvancedSearch()">
+              <option value="">همه</option>
+              <option value="in">داخل باشگاه</option>
+              <option value="out">خارج شده</option>
+              <option value="none">هنوز تردد ندارد</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>ترتیب نمایش</label>
+            <select id="advSearchSort" onchange="renderAdvancedSearch()">
+              <option value="recent">آخرین تردد</option>
+              <option value="name">نام (الفبایی)</option>
+              <option value="code">کد عضویت</option>
+            </select>
+          </div>
+        </div>
+        <div class="count-badge" id="advSearchCount" style="margin-bottom:14px; display:inline-block;">0 نتیجه</div>
+        <div id="advSearchList" class="member-list"></div>
+        <div id="advSearchEmpty" class="empty" style="display:none">با این فیلترها عضوی پیدا نشد.</div>
+      </div>
+
+      <!-- ============ اعضا: گزارش اعضا (مشترک با گزارش‌ها) ============ -->
+      <div class="page" data-page="members-report" style="--acc:var(--c-members)">
+        <div class="stat-grid" id="memberReportStats" style="--acc:var(--c-members); margin-bottom:26px;"></div>
+        <div class="section-title">
+          <h2>لیست کامل برای خروجی</h2>
+          <div style="margin-right:auto; display:flex; gap:8px;">
+            <button class="btn-secondary btn-sm" onclick="exportMembersCsv()">خروجی اکسل (CSV)</button>
+            <button class="btn-secondary btn-sm" onclick="window.print()">چاپ / PDF</button>
+          </div>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>نام</th><th>کد عضویت</th><th>تلفن</th><th>وضعیت</th><th>آخرین تردد</th></tr></thead>
+            <tbody id="memberReportBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ مالی و شهریه: تعرفه‌ها و پلن‌ها ============ -->
+      <div class="page" data-page="finance-plans" style="--acc:var(--c-finance)">
+        <div class="section-title">
+          <h2>پلن‌های عضویت</h2>
+          <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>افزودن پلن جدید</button>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>نام پلن</th><th>مدت</th><th>قیمت</th><th>تعداد عضو فعال</th></tr></thead>
+            <tbody><tr class="table-empty-row"><td colspan="4">هنوز پلنی تعریف نشده — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ مالی و شهریه: پرداخت‌ها ============ -->
+      <div class="page" data-page="finance-payments" style="--acc:var(--c-finance)">
+        <div class="section-title">
+          <h2>پرداخت‌ها</h2>
+          <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>ثبت پرداخت جدید</button>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>عضو</th><th>مبلغ</th><th>تاریخ</th><th>روش پرداخت</th></tr></thead>
+            <tbody><tr class="table-empty-row"><td colspan="4">هیچ پرداختی ثبت نشده — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ مالی و شهریه: بدهی‌ها ============ -->
+      <div class="page" data-page="finance-debts" style="--acc:var(--c-finance)">
+        <div class="section-title"><h2>بدهی‌های معوق</h2></div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>عضو</th><th>مبلغ بدهی</th><th>از تاریخ</th></tr></thead>
+            <tbody><tr class="table-empty-row"><td colspan="3">بدهی ثبت‌شده‌ای وجود ندارد — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ مالی و شهریه: تاریخچه مالی ============ -->
+      <div class="page" data-page="finance-history" style="--acc:var(--c-finance)">
+        <div class="section-title"><h2>تاریخچه‌ی مالی</h2></div>
+        <div class="not-connected">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
+            </svg>
+          </div>
+          <div class="nc-title">تاریخچه‌ی تراکنش‌ها هنوز ثبت نمی‌شود</div>
+          <div class="nc-text">وقتی پرداخت‌ها و بدهی‌ها به بک‌اند وصل شوند، تایم‌لاین کامل تراکنش‌های هر عضو اینجا نمایش داده می‌شود.</div>
+        </div>
+      </div>
+
+      <!-- ============ مالی و شهریه: گزارش‌های مالی (مشترک با گزارش‌ها) ============ -->
+      <div class="page" data-page="finance-reports" style="--acc:var(--c-finance)">
+        <div class="not-connected">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="11" width="3.4" height="9" rx="1"/><rect x="10.3" y="5" width="3.4" height="15" rx="1"/><rect x="16.6" y="14" width="3.4" height="6" rx="1"/>
+            </svg>
+          </div>
+          <div class="nc-title">گزارش مالی هنوز داده‌ای ندارد</div>
+          <div class="nc-text">این گزارش به داده‌ی پرداخت‌ها و بدهی‌ها نیاز دارد که هنوز در دیتابیس وجود ندارد.</div>
+        </div>
+      </div>
+
+      <!-- ============ گزارش‌ها: گزارش تردد ============ -->
+      <div class="page" data-page="reports-attendance" style="--acc:var(--c-reports)">
+        <div class="section-title">
+          <h2>گزارش تردد امروز</h2>
+          <div style="margin-right:auto; display:flex; gap:8px;">
+            <button class="btn-secondary btn-sm" onclick="exportAttendanceCsv()">خروجی اکسل (CSV)</button>
+            <button class="btn-secondary btn-sm" onclick="window.print()">چاپ / PDF</button>
+          </div>
+        </div>
+        <p class="block-hint">بر اساس لاگ شناسایی زنده؛ فقط ترددهای همین جلسه و امروز را شامل می‌شود.</p>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>عضو</th><th>زمان شناسایی</th></tr></thead>
+            <tbody id="attendanceReportBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ گزارش‌ها: خروجی PDF/اکسل (هاب) ============ -->
+      <div class="page" data-page="reports-export" style="--acc:var(--c-reports)">
+        <div class="section-title"><h2>خروجی گزارش‌ها</h2></div>
+        <p class="block-hint">این خروجی‌ها کاملاً در مرورگر تولید می‌شوند (بدون نیاز به سرور).</p>
+        <div class="member-row" style="justify-content:space-between;">
+          <div class="member-info"><div class="member-name">گزارش اعضا</div><div class="member-meta">لیست کامل اعضا با وضعیت تردد</div></div>
+          <div class="member-actions">
+            <button class="btn-secondary btn-sm" onclick="exportMembersCsv()">اکسل</button>
+            <button class="btn-secondary btn-sm" onclick="goToPage('members-report'); setTimeout(()=>window.print(), 200)">PDF</button>
+          </div>
+        </div>
+        <div class="member-row" style="justify-content:space-between; margin-top:10px;">
+          <div class="member-info"><div class="member-name">گزارش تردد</div><div class="member-meta">ترددهای امروز بر اساس لاگ شناسایی</div></div>
+          <div class="member-actions">
+            <button class="btn-secondary btn-sm" onclick="exportAttendanceCsv()">اکسل</button>
+            <button class="btn-secondary btn-sm" onclick="goToPage('reports-attendance'); setTimeout(()=>window.print(), 200)">PDF</button>
+          </div>
+        </div>
+        <div class="member-row" style="justify-content:space-between; margin-top:10px; opacity:.55;">
+          <div class="member-info"><div class="member-name">گزارش مالی</div><div class="member-meta">نیازمند بخش «مالی و شهریه»</div></div>
+          <div class="member-actions">
+            <button class="btn-secondary btn-sm" disabled>اکسل</button>
+            <button class="btn-secondary btn-sm" disabled>PDF</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ گزارش‌ها: گزارش‌های اختصاصی ============ -->
+      <div class="page" data-page="reports-custom" style="--acc:var(--c-reports)">
+        <div class="not-connected">
+          <div class="nc-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v5h5"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>
+            </svg>
+          </div>
+          <div class="nc-title">گزارش‌ساز اختصاصی هنوز وجود ندارد</div>
+          <div class="nc-text">امکان ساخت گزارش دلخواه (انتخاب ستون‌ها و بازه‌ی زمانی) در یک گام بعدی اضافه می‌شود.</div>
+        </div>
+      </div>
+
+      <!-- ============ تنظیمات: کاربران و دسترسی‌ها ============ -->
+      <div class="page" data-page="settings-users" style="--acc:var(--c-settings)">
+        <div class="section-title">
+          <h2>کاربران پنل</h2>
+          <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>افزودن کاربر جدید</button>
+        </div>
+        <div class="member-row" style="margin-bottom:22px;">
+          <div class="member-info"><div class="member-name">مدیر</div><div class="member-meta">دسترسی کامل — تنها حساب فعال این سیستم</div></div>
+          <span class="member-status status-in">فعال</span>
+        </div>
+        <p class="block-hint">چند-کاربری (مثلاً حساب جدا برای مربی) هنوز پیاده نشده؛ فعلاً یک رمز مشترک برای کل پنل وجود دارد.</p>
+
+        <div class="divider"></div>
+        <div class="section-title"><h2>تغییر رمز عبور من</h2></div>
+        <div class="field">
+          <label>رمز فعلی</label>
+          <input id="currentPassword" type="password" />
+        </div>
+        <div class="field">
+          <label>رمز جدید (حداقل ۴ کاراکتر)</label>
+          <input id="newPassword" type="password" />
+        </div>
+        <div class="error-msg" id="passwordChangeMsg"></div>
+        <button class="btn-primary" onclick="submitPasswordChange()">ذخیره رمز جدید</button>
+      </div>
+
+      <!-- ============ تنظیمات: تنظیمات عمومی ============ -->
+      <div class="page" data-page="settings-general" style="--acc:var(--c-settings)">
+        <p class="block-hint">این مقادیر هنوز ذخیره نمی‌شوند — طراحی فرم برای وقتی که به بک‌اند وصل شود.</p>
+        <div class="form-grid">
+          <div class="field"><label>زبان پنل</label><select disabled><option>فارسی</option></select></div>
+          <div class="field"><label>منطقه‌ی زمانی</label><select disabled><option>Asia/Tehran</option></select></div>
+          <div class="field"><label>قالب تاریخ</label><select disabled><option>شمسی</option></select></div>
+        </div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+        </div>
+      </div>
+
+      <!-- ============ تنظیمات: لاگ سیستم ============ -->
+      <div class="page" data-page="settings-log" style="--acc:var(--c-settings)">
+        <div class="section-title"><h2>لاگ شناسایی (سیستم)</h2></div>
+        <p class="block-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — یک خط اینجا ثبت می‌شود. همین داده در صفحه‌ی «ثبت تردد» زیر پذیرش هم نشان داده می‌شود.</p>
+        <div id="settingsLogList" class="feed-list"></div>
+        <div id="settingsLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
+      </div>
+
+      <!-- ============ تنظیمات: پشتیبان‌گیری ============ -->
+      <div class="page" data-page="settings-backup" style="--acc:var(--c-settings)">
+        <div class="section-title"><h2>پشتیبان‌گیری و بازیابی</h2></div>
+        <p class="block-hint">یک بک‌آپ شامل دیتابیس کامل (اعضا، تردد، لاگ) و عکس‌هاست. پیشنهاد می‌شود مرتب یک نسخه دانلود و جای امنی نگه‌داری شود.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn-primary" onclick="downloadBackup()">دانلود بک‌آپ</button>
+          <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">افزودن بک‌آپ (بازیابی)</button>
+          <input type="file" id="restoreFileInput" accept=".zip" style="display:none" onchange="restoreBackup(event)" />
+        </div>
+        <div class="error-msg" id="restoreStatusMsg"></div>
+      </div>
+
+      <!-- ============ تنظیمات: به‌روزرسانی سیستم ============ -->
+      <div class="page" data-page="settings-update" style="--acc:var(--c-settings)">
+        <div class="member-row" style="margin-bottom:18px;">
+          <div class="member-info"><div class="member-name">نسخه‌ی فعلی</div><div class="member-meta">به‌روزرسانی خودکار هنوز پیاده نشده</div></div>
+          <span class="member-status status-none">دستی</span>
+        </div>
+        <p class="block-hint">به‌روزرسانی فعلاً از طریق <code>git pull</code> و rebuild داکر روی سرور انجام می‌شود (در README پروژه توضیح داده شده).</p>
+        <button class="btn-secondary" disabled>بررسی به‌روزرسانی</button>
+      </div>
+
+      <!-- ============ تنظیمات: اطلاعات باشگاه ============ -->
+      <div class="page" data-page="settings-info" style="--acc:var(--c-settings)">
+        <p class="block-hint">این اطلاعات هنوز ذخیره نمی‌شوند؛ فقط برای پیش‌نمایش فرم است.</p>
+        <div class="form-grid">
+          <div class="field"><label>نام باشگاه</label><input type="text" value="باشگاه گلادیاتور" disabled /></div>
+          <div class="field"><label>شماره تماس</label><input type="tel" placeholder="021xxxxxxx" disabled /></div>
+          <div class="field"><label>آدرس</label><input type="text" placeholder="آدرس باشگاه" disabled /></div>
+        </div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+        </div>
+      </div>
+
+    </div>
   </div>
-</header>
-
-<main>
-  <div class="tabs">
-    <button class="tab-btn active" id="tabBtnQueue" onclick="showTab('queue')">صف انتظار</button>
-    <button class="tab-btn" id="tabBtnMembers" onclick="showTab('members')">اعضا</button>
-    <button class="tab-btn" id="tabBtnSettings" onclick="showTab('settings')">تنظیمات</button>
-  </div>
-
-  <div class="tab-panel active" id="tabQueue">
-    <div class="section-title">
-      <h2>افراد در انتظار ثبت‌نام</h2>
-      <span class="count-badge" id="pendingCount">0</span>
-    </div>
-    <div id="grid" class="grid"></div>
-    <div id="emptyState" class="empty" style="display:none">فعلاً کسی در صف پذیرش نیست. به محض شناسایی یک چهره جدید جلوی دوربین، اینجا نمایش داده می‌شود.</div>
-
-    <div class="feed">
-      <div class="section-title"><h2>ورودهای اخیر</h2></div>
-      <div id="feedList" class="feed-list"></div>
-    </div>
-  </div>
-
-  <div class="tab-panel" id="tabMembers">
-    <div class="section-title">
-      <h2>اعضای ثبت‌شده</h2>
-      <span class="count-badge" id="memberCount">0</span>
-    </div>
-    <div class="search-box">
-      <input id="memberSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderMembers()" />
-    </div>
-    <div id="memberList" class="member-list"></div>
-    <div id="memberEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
-  </div>
-
-  <div class="tab-panel" id="tabSettings">
-    <div class="section-title"><h2>🪵 لاگ زنده</h2></div>
-    <p class="settings-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله یک خط ثبت می‌شود.</p>
-    <button class="btn-secondary" id="toggleLogBtn" onclick="toggleRecognitionLog()">نمایش لاگ</button>
-    <div id="recognitionLogWrap" style="display:none; margin-top:14px;">
-      <div id="recognitionLogList" class="feed-list" style="max-height:280px;"></div>
-      <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
-    </div>
-
-    <div class="settings-divider"></div>
-
-    <div class="section-title"><h2>💾 پشتیبان‌گیری</h2></div>
-    <p class="settings-hint">یک بک‌آپ شامل دیتابیس کامل (اعضا، تردد، لاگ) و عکس‌هاست. پیشنهاد می‌شود مرتب یک نسخه دانلود و جای امنی نگه‌داری شود.</p>
-    <div class="settings-actions">
-      <button class="btn-primary" onclick="downloadBackup()">⬇️ دانلود بک‌آپ</button>
-      <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">⬆️ افزودن بک‌آپ (بازیابی)</button>
-      <input type="file" id="restoreFileInput" accept=".zip" style="display:none" onchange="restoreBackup(event)" />
-    </div>
-    <div class="error-msg" id="restoreStatusMsg"></div>
-
-    <div class="settings-divider"></div>
-
-    <div class="section-title"><h2>🔑 تغییر رمز عبور</h2></div>
-    <p class="settings-hint">پیشنهاد می‌شود همین اول کار، رمز پیش‌فرض را عوض کنید.</p>
-    <div class="field">
-      <label>رمز فعلی</label>
-      <input id="currentPassword" type="password" />
-    </div>
-    <div class="field">
-      <label>رمز جدید (حداقل ۴ کاراکتر)</label>
-      <input id="newPassword" type="password" />
-    </div>
-    <div class="error-msg" id="passwordChangeMsg"></div>
-    <div class="settings-actions">
-      <button class="btn-primary" onclick="submitPasswordChange()">ذخیره رمز جدید</button>
-    </div>
-  </div>
-</main>
 </div>
 
+<!-- ================= MODALS ================= -->
 <div class="overlay" id="overlay">
   <div class="modal">
     <img id="modalPhoto" src="" alt="عکس مشتری" />
@@ -395,16 +933,242 @@
 <script>
 const API_BASE = '';
 let activePendingId = null;
-let activeTab = 'queue';
-let restoringNow = false; // see restoreBackup() + the 'backup_restored' WS handler below
-const pendingItems = new Map(); // id -> item data, kept in sync with server
-let members = []; // loaded lazily the first time the "اعضا" tab is opened
-let appStarted = false; // true once loadPending()/connectWs() have run for this login
+let restoringNow = false;
+const pendingItems = new Map();
+let members = [];
+let appStarted = false;
 
-// ---- auth ----
-// Any fetch anywhere in this file that comes back 401 means the session
-// expired (or was never valid) -- bounce straight to the login screen
-// instead of letting every caller handle it separately.
+/* ============================================================ */
+/* icons (inline SVG, no emoji)                                  */
+/* ============================================================ */
+const ICONS = {
+  dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.3" y="3.3" width="7.2" height="7.2" rx="1.6"/><rect x="13.5" y="3.3" width="7.2" height="7.2" rx="1.6"/>
+    <rect x="3.3" y="13.5" width="7.2" height="7.2" rx="1.6"/><rect x="13.5" y="13.5" width="7.2" height="7.2" rx="1.6"/></svg>`,
+  reception: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 8l5 4-5 4"/><path d="M19 12H9"/></svg>`,
+  members: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="8" r="3"/><path d="M3.3 20c0-3.5 2.6-6 5.7-6s5.7 2.5 5.7 6"/>
+    <circle cx="17.2" cy="9" r="2.2"/><path d="M15.7 13.1c2.4.4 3.9 2.4 3.9 5.2"/></svg>`,
+  finance: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="7" width="18" height="13" rx="2.2"/><path d="M7 7V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V7"/>
+    <path d="M3 11h18"/><circle cx="16.3" cy="14.5" r="1.2"/></svg>`,
+  reports: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="11" width="3.4" height="9" rx="1"/><rect x="10.3" y="5" width="3.4" height="15" rx="1"/><rect x="16.6" y="14" width="3.4" height="6" rx="1"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/><path d="M19.4 12a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4.7a7.3 7.3 0 0 0-1.9-1.1l-.4-2.6H9.2l-.4 2.6a7.3 7.3 0 0 0-1.9 1.1l-2.4-.7-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-.7a7.3 7.3 0 0 0 1.9 1.1l.4 2.6h5.6l.4-2.6a7.3 7.3 0 0 0 1.9-1.1l2.4.7 2-3.4-2-1.6c.07-.4.1-.8.1-1.2Z"/></svg>`,
+  chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
+};
+
+/* ============================================================ */
+/* navigation tree (drives sidebar + routing)                    */
+/* ============================================================ */
+const NAV = [
+  { id: 'dashboard', label: 'داشبورد', accent: 'dashboard', icon: ICONS.dashboard, page: 'dashboard',
+    title: 'داشبورد', subtitle: 'نمای کلی و آمار' },
+
+  { id: 'reception', label: 'پذیرش', accent: 'reception', icon: ICONS.reception, children: [
+      { id: 'reception-queue', label: 'صف انتظار', page: 'reception-queue', title: 'صف انتظار', subtitle: 'ثبت تردد و مدیریت ورود و خروج' },
+      { id: 'reception-checkin', label: 'ثبت تردد', page: 'reception-checkin', title: 'ثبت تردد', subtitle: 'ورودهای اخیر و لاگ شناسایی زنده' },
+      { id: 'reception-face', label: 'ثبت چهره', page: 'reception-queue', title: 'ثبت چهره', subtitle: 'همان صف انتظار — ثبت‌نام از طریق چهره' },
+      { id: 'reception-inout', label: 'ورود / خروج اعضا', page: 'reception-inout', title: 'ورود / خروج اعضا', subtitle: 'ثبت دستی تردد' },
+      { id: 'reception-settings', label: 'تنظیمات پذیرش', children: [
+          { id: 'reception-settings-camera', label: 'دوربین و دستگاه‌ها', page: 'reception-settings-camera', title: 'دوربین و دستگاه‌ها', subtitle: 'تنظیمات پذیرش' },
+          { id: 'reception-settings-behavior', label: 'رفتار ثبت تردد', page: 'reception-settings-behavior', title: 'رفتار ثبت تردد', subtitle: 'تنظیمات پذیرش' },
+          { id: 'reception-settings-alerts', label: 'اعلان‌ها', page: 'reception-settings-alerts', title: 'اعلان‌های پذیرش', subtitle: 'تنظیمات پذیرش' },
+      ]},
+  ]},
+
+  { id: 'members', label: 'اعضا', accent: 'members', icon: ICONS.members, children: [
+      { id: 'members-list', label: 'لیست اعضا', page: 'members-list', title: 'اعضای ثبت‌شده', subtitle: 'مدیریت اعضای باشگاه' },
+      { id: 'members-add', label: 'افزودن عضو', page: 'members-add', title: 'افزودن عضو', subtitle: 'مدیریت اعضای باشگاه' },
+      { id: 'members-edit', label: 'ویرایش اطلاعات', page: 'members-list', title: 'ویرایش اطلاعات عضو', subtitle: 'برای ویرایش، دکمه‌ی «ویرایش» کنار هر عضو را بزنید' },
+      { id: 'members-renew', label: 'تمدید / پایان عضویت', page: 'members-renew', title: 'تمدید / پایان عضویت', subtitle: 'مدیریت اعضای باشگاه' },
+      { id: 'members-search', label: 'جستجوی پیشرفته', page: 'members-search', title: 'جستجوی پیشرفته', subtitle: 'مدیریت اعضای باشگاه' },
+      { id: 'members-report', label: 'گزارش اعضا', page: 'members-report', title: 'گزارش اعضا', subtitle: 'مدیریت اعضای باشگاه' },
+  ]},
+
+  { id: 'finance', label: 'مالی و شهریه', accent: 'finance', icon: ICONS.finance, children: [
+      { id: 'finance-plans', label: 'تعرفه‌ها و پلن‌ها', page: 'finance-plans', title: 'تعرفه‌ها و پلن‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+      { id: 'finance-payments', label: 'پرداخت‌ها', page: 'finance-payments', title: 'پرداخت‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+      { id: 'finance-debts', label: 'بدهی‌ها', page: 'finance-debts', title: 'بدهی‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+      { id: 'finance-history', label: 'تاریخچه مالی', page: 'finance-history', title: 'تاریخچه مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+      { id: 'finance-reports', label: 'گزارش‌های مالی', page: 'finance-reports', title: 'گزارش‌های مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+  ]},
+
+  { id: 'reports', label: 'گزارش‌ها', accent: 'reports', icon: ICONS.reports, children: [
+      { id: 'reports-attendance', label: 'گزارش تردد', page: 'reports-attendance', title: 'گزارش تردد', subtitle: 'تحلیل و خروجی اطلاعات' },
+      { id: 'reports-members', label: 'گزارش اعضا', page: 'members-report', title: 'گزارش اعضا', subtitle: 'تحلیل و خروجی اطلاعات' },
+      { id: 'reports-finance', label: 'گزارش مالی', page: 'finance-reports', title: 'گزارش مالی', subtitle: 'تحلیل و خروجی اطلاعات' },
+      { id: 'reports-custom', label: 'گزارش‌های اختصاصی', page: 'reports-custom', title: 'گزارش‌های اختصاصی', subtitle: 'تحلیل و خروجی اطلاعات' },
+      { id: 'reports-export', label: 'PDF / خروجی اکسل', page: 'reports-export', title: 'خروجی گزارش‌ها', subtitle: 'تحلیل و خروجی اطلاعات' },
+  ]},
+
+  { id: 'settings', label: 'تنظیمات', accent: 'settings', icon: ICONS.settings, children: [
+      { id: 'settings-users', label: 'کاربران و دسترسی‌ها', page: 'settings-users', title: 'کاربران و دسترسی‌ها', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-general', label: 'تنظیمات عمومی', page: 'settings-general', title: 'تنظیمات عمومی', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-log', label: 'لاگ سیستم', page: 'settings-log', title: 'لاگ سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-backup', label: 'پشتیبان‌گیری (بکاپ)', page: 'settings-backup', title: 'پشتیبان‌گیری (بکاپ)', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-update', label: 'به‌روزرسانی سیستم', page: 'settings-update', title: 'به‌روزرسانی سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-info', label: 'اطلاعات باشگاه', page: 'settings-info', title: 'اطلاعات باشگاه', subtitle: 'پیگیری و مدیریت سیستم' },
+  ]},
+];
+
+// runs once per navigated-to leaf id, for pages that need fresh data
+const PAGE_LOADERS = {
+  'dashboard': loadDashboard,
+  'reception-queue': loadPending,
+  'reception-face': loadPending,
+  'reception-checkin': () => { loadRecognitionLog(); },
+  'reception-inout': async () => { await ensureMembersLoaded(); renderInOutList(); },
+  'members-list': loadMembers,
+  'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
+  'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
+  'members-report': async () => { await ensureMembersLoaded(); renderMemberReport(); },
+  'reports-members': async () => { await ensureMembersLoaded(); renderMemberReport(); },
+  'reports-attendance': () => { loadRecognitionLog(); renderAttendanceReport(); },
+  'settings-log': () => { loadRecognitionLog(); },
+};
+
+let activeLeafId = null;
+
+function findLeaf(id, nodes = NAV) {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.children) { const f = findLeaf(id, n.children); if (f) return f; }
+  }
+  return null;
+}
+
+function buildNav() {
+  const root = document.getElementById('navTree');
+  root.innerHTML = NAV.map(node => renderNavNode(node, 1)).join('');
+}
+
+function renderNavNode(node, depth) {
+  const hasChildren = !!node.children;
+  if (depth === 1) {
+    const accVar = node.accent ? `--acc:var(--c-${node.accent}); --acc-dim:var(--c-${node.accent}-dim);` : '';
+    if (!hasChildren) {
+      return `
+        <div class="nav-group" data-nav-id="${node.id}">
+          <button class="nav-item" style="${accVar}" onclick="onNavClick('${node.id}')">
+            <span class="icon-chip">${node.icon}</span><span>${node.label}</span>
+          </button>
+        </div>`;
+    }
+    return `
+      <div class="nav-group" data-nav-id="${node.id}">
+        <button class="nav-item" style="${accVar}" onclick="onNavClick('${node.id}')">
+          <span class="icon-chip">${node.icon}</span><span>${node.label}</span>
+          <span class="chev">${ICONS.chevron}</span>
+        </button>
+        <div class="nav-children">
+          ${node.children.map(c => renderNavNode(c, 2)).join('')}
+        </div>
+      </div>`;
+  }
+  // depth 2 (may itself have children -> depth 3 group, e.g. تنظیمات پذیرش)
+  if (node.children) {
+    return `
+      <div class="nav-subgroup" data-nav-id="${node.id}">
+        <button class="nav-child" onclick="onNavClick('${node.id}')">
+          <span>${node.label}</span><span class="chev">${ICONS.chevron}</span>
+        </button>
+        <div class="nav-subchildren">
+          ${node.children.map(c => `<button class="nav-child" data-nav-id="${c.id}" onclick="onNavClick('${c.id}')">${c.label}</button>`).join('')}
+        </div>
+      </div>`;
+  }
+  return `<button class="nav-child" data-nav-id="${node.id}" onclick="onNavClick('${node.id}')">${node.label}</button>`;
+}
+
+function onNavClick(id) {
+  const node = findLeaf(id);
+  if (!node) return;
+
+  if (node.children) {
+    // group toggle (accordion): top-level groups close siblings, nested groups don't
+    const el = document.querySelector(`[data-nav-id="${id}"]`);
+    const isTop = el.classList.contains('nav-group') && el.parentElement.id === 'navTree';
+    if (isTop) {
+      const wasOpen = el.classList.contains('open');
+      document.querySelectorAll('#navTree > .nav-group.open').forEach(g => g.classList.remove('open'));
+      if (!wasOpen) el.classList.add('open');
+    } else {
+      el.classList.toggle('open');
+    }
+    return;
+  }
+
+  goToPage(id);
+}
+
+function goToPage(leafId) {
+  const node = findLeaf(leafId);
+  if (!node || !node.page) return;
+  activeLeafId = leafId;
+
+  // open the ancestor group chain so the active item is visible
+  document.querySelectorAll('.nav-group, .nav-subgroup').forEach(g => g.classList.remove('open'));
+  document.querySelectorAll('.nav-item.active, .nav-child.active').forEach(el => el.classList.remove('active'));
+  markAncestorsOpen(leafId);
+
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === node.page));
+  document.getElementById('pageTitle').textContent = node.title || node.label;
+  document.getElementById('pageSubtitle').textContent = node.subtitle || '';
+
+  const pageEl = document.querySelector(`.page[data-page="${node.page}"]`);
+  const acc = pageEl ? getComputedStyle(pageEl).getPropertyValue('--acc').trim() : '';
+  document.getElementById('pageAccentBar').style.background = acc || 'var(--accent)';
+
+  renderHeaderActions(node.page);
+
+  const loader = PAGE_LOADERS[leafId];
+  if (loader) loader();
+}
+
+function markAncestorsOpen(id, nodes = NAV, chain = []) {
+  for (const n of nodes) {
+    const nextChain = [...chain, n.id];
+    if (n.id === id) {
+      chain.forEach(ancestorId => {
+        const el = document.querySelector(`[data-nav-id="${ancestorId}"]`);
+        if (el) el.classList.add('open');
+      });
+      const selfEl = document.querySelector(`[data-nav-id="${id}"]`);
+      if (selfEl) selfEl.classList.add(selfEl.classList.contains('nav-group') ? 'active' : 'active');
+      if (selfEl) selfEl.querySelector(':scope > .nav-item')?.classList.add('active');
+      if (selfEl && selfEl.classList.contains('nav-child')) selfEl.classList.add('active');
+      return true;
+    }
+    if (n.children && markAncestorsOpen(id, n.children, nextChain)) return true;
+  }
+  return false;
+}
+
+function renderHeaderActions(pageId) {
+  const box = document.getElementById('pageHeaderActions');
+  if (pageId === 'reception-queue' || pageId === 'reception-checkin' || pageId === 'reception-inout') {
+    box.innerHTML = `<div class="ws-indicator"><span class="dot" id="wsDot"></span><span id="wsLabel">در حال اتصال...</span></div>`;
+    syncWsIndicator();
+  } else {
+    box.innerHTML = '';
+  }
+}
+
+let wsLive = false;
+function syncWsIndicator() {
+  const dot = document.getElementById('wsDot');
+  const label = document.getElementById('wsLabel');
+  if (!dot) return;
+  dot.classList.toggle('live', wsLive);
+  label.textContent = wsLive ? 'اتصال زنده برقرار است' : 'اتصال قطع شد، تلاش مجدد...';
+}
+
+/* ============================================================ */
+/* auth                                                           */
+/* ============================================================ */
 const _rawFetch = window.fetch.bind(window);
 window.fetch = async function (...args) {
   const res = await _rawFetch(...args);
@@ -418,11 +1182,8 @@ window.fetch = async function (...args) {
 async function checkAuth() {
   const res = await fetch(`${API_BASE}/api/auth/me`);
   const data = await res.json().catch(() => ({ role: null }));
-  if (data.role === 'manager') {
-    showApp();
-  } else {
-    showLoginScreen();
-  }
+  if (data.role === 'manager') showApp();
+  else showLoginScreen();
 }
 
 function showLoginScreen(message) {
@@ -436,10 +1197,11 @@ function showLoginScreen(message) {
 
 function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appRoot').style.display = 'block';
+  document.getElementById('appRoot').style.display = 'flex';
   if (!appStarted) {
     appStarted = true;
-    loadPending();
+    buildNav();
+    goToPage('dashboard');
     connectWs();
   }
 }
@@ -448,17 +1210,11 @@ async function submitLogin() {
   const errorEl = document.getElementById('loginError');
   errorEl.textContent = '';
   const password = document.getElementById('loginPassword').value;
-  if (!password) {
-    errorEl.textContent = 'رمز عبور را وارد کنید.';
-    return;
-  }
+  if (!password) { errorEl.textContent = 'رمز عبور را وارد کنید.'; return; }
 
   const res = await fetch(`${API_BASE}/api/auth/manager/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     errorEl.textContent = err.detail || 'رمز عبور اشتباه است.';
@@ -485,8 +1241,7 @@ async function submitPasswordChange() {
   }
 
   const res = await fetch(`${API_BASE}/api/auth/manager/change-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ current_password, new_password }),
   });
 
@@ -502,13 +1257,28 @@ async function submitPasswordChange() {
   msgEl.textContent = 'رمز عبور با موفقیت تغییر کرد.';
 }
 
+/* ============================================================ */
+/* helpers                                                        */
+/* ============================================================ */
+function escapeAttr(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return `${seconds} ثانیه پیش`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes} دقیقه پیش`;
   const hours = Math.floor(minutes / 60);
-  return `${hours} ساعت پیش`;
+  if (hours < 24) return `${hours} ساعت پیش`;
+  const days = Math.floor(hours / 24);
+  return `${days} روز پیش`;
+}
+
+function isToday(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  return d.toDateString() === now.toDateString();
 }
 
 function showToast(html, duration = 7000) {
@@ -520,18 +1290,25 @@ function showToast(html, duration = 7000) {
   setTimeout(() => el.remove(), duration);
 }
 
-function showTab(name) {
-  activeTab = name;
-  document.getElementById('tabQueue').classList.toggle('active', name === 'queue');
-  document.getElementById('tabMembers').classList.toggle('active', name === 'members');
-  document.getElementById('tabSettings').classList.toggle('active', name === 'settings');
-  document.getElementById('tabBtnQueue').classList.toggle('active', name === 'queue');
-  document.getElementById('tabBtnMembers').classList.toggle('active', name === 'members');
-  document.getElementById('tabBtnSettings').classList.toggle('active', name === 'settings');
-  if (name === 'members') loadMembers();
+function downloadCsv(filename, rows) {
+  // rows: array of arrays; quote every cell and escape embedded quotes
+  const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
-function render() {
+async function ensureMembersLoaded() {
+  if (!members.length) await loadMembers();
+}
+
+/* ============================================================ */
+/* دوربین / صف انتظار (پذیرش)                                     */
+/* ============================================================ */
+function renderQueue() {
   const grid = document.getElementById('grid');
   const items = [...pendingItems.values()].sort((a, b) => new Date(b.first_seen_at) - new Date(a.first_seen_at));
 
@@ -542,7 +1319,7 @@ function render() {
     <div class="card" data-id="${item.id}">
       <img src="${item.photo_url}" alt="چهره ناشناس" />
       <div class="card-body">
-        <div class="waited">⏱ ${timeAgo(item.first_seen_at)}</div>
+        <div class="waited">${timeAgo(item.first_seen_at)}</div>
         <div class="card-actions">
           <button class="btn-primary" onclick="openModal(${item.id})">ثبت‌نام جدید</button>
           <div class="card-actions-row">
@@ -557,6 +1334,8 @@ function render() {
 
 function addFeedItem(text) {
   const list = document.getElementById('feedList');
+  if (!list) return;
+  document.getElementById('feedEmptyState').style.display = 'none';
   const el = document.createElement('div');
   el.className = 'feed-item';
   el.innerHTML = text;
@@ -569,7 +1348,7 @@ async function loadPending() {
   const items = await res.json();
   pendingItems.clear();
   items.forEach(i => pendingItems.set(i.id, i));
-  render();
+  renderQueue();
 }
 
 async function loadMembers() {
@@ -581,23 +1360,16 @@ async function loadMembers() {
 async function deleteMember(id) {
   const member = members.find(m => m.id === id);
   const name = member ? member.full_name : 'این عضو';
-  if (!confirm(`آیا از حذف «${name}» مطمئن هستید؟ این کار قابل بازگشت نیست و تاریخچه‌ی تردد او هم حذف می‌شود.`)) {
-    return;
-  }
+  if (!confirm(`آیا از حذف «${name}» مطمئن هستید؟ این کار قابل بازگشت نیست و تاریخچه‌ی تردد او هم حذف می‌شود.`)) return;
   const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    alert('حذف انجام نشد. دوباره تلاش کنید.');
-    return;
-  }
+  if (!res.ok) { alert('حذف انجام نشد. دوباره تلاش کنید.'); return; }
   members = members.filter(m => m.id !== id);
   renderMembers();
 }
 
 async function setAttendance(id, eventType) {
   const res = await fetch(`${API_BASE}/api/users/${id}/attendance`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event_type: eventType }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_type: eventType }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -606,11 +1378,9 @@ async function setAttendance(id, eventType) {
   }
   const result = await res.json();
   const member = members.find(m => m.id === id);
-  if (member) {
-    member.last_event_type = result.event_type;
-    member.last_checkin_at = result.checkin_at;
-  }
+  if (member) { member.last_event_type = result.event_type; member.last_checkin_at = result.checkin_at; }
   renderMembers();
+  renderInOutList();
 }
 
 let activeEditId = null;
@@ -635,14 +1405,10 @@ async function submitEdit() {
   const phone = document.getElementById('editPhone').value.trim();
   const errorEl = document.getElementById('editModalError');
 
-  if (full_name.length < 2) {
-    errorEl.textContent = 'لطفاً نام کامل را وارد کنید.';
-    return;
-  }
+  if (full_name.length < 2) { errorEl.textContent = 'لطفاً نام کامل را وارد کنید.'; return; }
 
   const res = await fetch(`${API_BASE}/api/users/${activeEditId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ full_name, phone: phone || null }),
   });
 
@@ -654,20 +1420,13 @@ async function submitEdit() {
 
   const result = await res.json();
   const member = members.find(m => m.id === activeEditId);
-  if (member) {
-    member.full_name = result.full_name;
-    member.phone = result.phone;
-  }
+  if (member) { member.full_name = result.full_name; member.phone = result.phone; }
   renderMembers();
   closeEditModal();
 }
 
-// ---- workout plan editor (admin side) ----
+/* ---- workout plan editor (admin side) ---- */
 let activeWorkoutUserId = null;
-
-function escapeAttr(value) {
-  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
 
 function workoutRowHtml(item) {
   const name = item ? escapeAttr(item.exercise_name) : '';
@@ -681,9 +1440,9 @@ function workoutRowHtml(item) {
       <input type="text" class="w-reps" placeholder="8-12" value="${reps}" />
       <input type="text" class="w-notes" placeholder="یادداشت (اختیاری)" value="${notes}" />
       <div class="workout-row-actions">
-        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, -1)" title="جابه‌جایی به بالا">▲</button>
-        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, 1)" title="جابه‌جایی به پایین">▼</button>
-        <button class="btn-sm btn-ghost" onclick="removeWorkoutRow(this)" title="حذف این حرکت">✕</button>
+        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, -1)" title="جابه‌جایی به بالا">&uarr;</button>
+        <button class="btn-sm btn-secondary" onclick="moveWorkoutRow(this, 1)" title="جابه‌جایی به پایین">&darr;</button>
+        <button class="btn-sm btn-ghost" onclick="removeWorkoutRow(this)" title="حذف این حرکت">&times;</button>
       </div>
     </div>`;
 }
@@ -722,9 +1481,7 @@ function addWorkoutRow() {
   list.insertAdjacentHTML('beforeend', workoutRowHtml(null));
 }
 
-function removeWorkoutRow(button) {
-  button.closest('.workout-row').remove();
-}
+function removeWorkoutRow(button) { button.closest('.workout-row').remove(); }
 
 function moveWorkoutRow(button, direction) {
   const row = button.closest('.workout-row');
@@ -746,7 +1503,7 @@ async function submitWorkoutPlan() {
     const reps = row.querySelector('.w-reps').value.trim();
     const notes = row.querySelector('.w-notes').value.trim();
 
-    if (!exercise_name && !setsRaw && !reps && !notes) continue; // fully empty row -> just skip it
+    if (!exercise_name && !setsRaw && !reps && !notes) continue;
 
     if (!exercise_name || !setsRaw || !reps) {
       errorEl.textContent = 'برای هر حرکت، نام/ست/تکرار را کامل پر کنید (یا کامل خالی بگذارید تا نادیده گرفته شود).';
@@ -761,9 +1518,7 @@ async function submitWorkoutPlan() {
   }
 
   const res = await fetch(`${API_BASE}/api/users/${activeWorkoutUserId}/workout`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }),
   });
 
   if (!res.ok) {
@@ -782,18 +1537,8 @@ function statusBadge(member) {
   return '<span class="member-status status-out">خارج شده</span>';
 }
 
-function renderMembers() {
-  const query = (document.getElementById('memberSearch').value || '').trim().toLowerCase();
-  const filtered = members.filter(m => {
-    if (!query) return true;
-    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
-  });
-
-  document.getElementById('memberCount').textContent = members.length;
-  document.getElementById('memberEmptyState').style.display = filtered.length ? 'none' : 'block';
-
-  const list = document.getElementById('memberList');
-  list.innerHTML = filtered.map(m => `
+function memberRowHtml(m, extraActionsHtml) {
+  return `
     <div class="member-row">
       <img src="${m.photo_url || ''}" alt="${escapeAttr(m.full_name)}" onerror="this.style.visibility='hidden'" />
       <div class="member-info">
@@ -804,17 +1549,180 @@ function renderMembers() {
         </div>
       </div>
       ${statusBadge(m)}
-      <div class="member-actions">
-        <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
-        <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
-        <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
-        <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
-        <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
-      </div>
-    </div>
+      <div class="member-actions">${extraActionsHtml}</div>
+    </div>`;
+}
+
+function renderMembers() {
+  const query = (document.getElementById('memberSearch').value || '').trim().toLowerCase();
+  const filtered = members.filter(m => {
+    if (!query) return true;
+    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
+  });
+
+  document.getElementById('memberCount').textContent = members.length;
+  document.getElementById('memberEmptyState').style.display = filtered.length ? 'none' : 'block';
+
+  document.getElementById('memberList').innerHTML = filtered.map(m => memberRowHtml(m, `
+    <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
+    <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
+    <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
+    <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
+    <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
+  `)).join('');
+}
+
+/* ---- پذیرش: ورود/خروج دستی ---- */
+function renderInOutList() {
+  const box = document.getElementById('inoutList');
+  if (!box) return;
+  const query = (document.getElementById('inoutSearch').value || '').trim().toLowerCase();
+  const filtered = members.filter(m => {
+    if (!query) return true;
+    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
+  });
+  document.getElementById('inoutEmptyState').style.display = filtered.length ? 'none' : 'block';
+  box.innerHTML = filtered.map(m => memberRowHtml(m, `
+    <button class="btn-sm btn-primary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
+    <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
+  `)).join('');
+}
+
+/* ---- اعضا: افزودن عضو (placeholder) / تمدید (placeholder) ---- */
+function populateRenewSelect() {
+  const sel = document.getElementById('renewMemberSelect');
+  sel.innerHTML = '<option value="">— انتخاب کنید —</option>' +
+    members.map(m => `<option value="${m.id}">${escapeAttr(m.full_name)}${m.membership_code ? ' (کد ' + m.membership_code + ')' : ''}</option>`).join('');
+}
+
+function renderRenewPanel() {
+  const id = parseInt(document.getElementById('renewMemberSelect').value, 10);
+  const panel = document.getElementById('renewPanel');
+  if (!id) { panel.style.display = 'none'; return; }
+  const member = members.find(m => m.id === id);
+  document.getElementById('renewPanelName').textContent = member ? member.full_name : '—';
+  panel.style.display = 'block';
+}
+
+/* ---- اعضا: جستجوی پیشرفته (واقعی، روی داده‌ی موجود) ---- */
+function renderAdvancedSearch() {
+  const query = (document.getElementById('advSearchQuery').value || '').trim().toLowerCase();
+  const status = document.getElementById('advSearchStatus').value;
+  const sort = document.getElementById('advSearchSort').value;
+
+  let filtered = members.filter(m => {
+    if (query && ![m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query))) return false;
+    if (status === 'in' && m.last_event_type !== 'in') return false;
+    if (status === 'out' && m.last_event_type !== 'out') return false;
+    if (status === 'none' && m.last_event_type) return false;
+    return true;
+  });
+
+  if (sort === 'name') filtered = filtered.slice().sort((a, b) => a.full_name.localeCompare(b.full_name, 'fa'));
+  else if (sort === 'code') filtered = filtered.slice().sort((a, b) => (a.membership_code || '').localeCompare(b.membership_code || ''));
+  else filtered = filtered.slice().sort((a, b) => new Date(b.last_checkin_at || 0) - new Date(a.last_checkin_at || 0));
+
+  document.getElementById('advSearchCount').textContent = `${filtered.length} نتیجه`;
+  document.getElementById('advSearchEmpty').style.display = filtered.length ? 'none' : 'block';
+  document.getElementById('advSearchList').innerHTML = filtered.map(m => memberRowHtml(m, `
+    <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
+    <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
+  `)).join('');
+}
+
+/* ---- اعضا/گزارش‌ها: گزارش اعضا (واقعی) ---- */
+function renderMemberReport() {
+  const total = members.length;
+  const inCount = members.filter(m => m.last_event_type === 'in').length;
+  const outCount = members.filter(m => m.last_event_type === 'out').length;
+  const noneCount = total - inCount - outCount;
+
+  const statBox = document.getElementById('memberReportStats');
+  statBox.innerHTML = `
+    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">کل اعضا</div></div>
+    <div class="stat-card"><div class="stat-value">${inCount}</div><div class="stat-label">داخل باشگاه</div></div>
+    <div class="stat-card"><div class="stat-value">${outCount}</div><div class="stat-label">خارج شده</div></div>
+    <div class="stat-card"><div class="stat-value">${noneCount}</div><div class="stat-label">هنوز تردد ندارد</div></div>
+  `;
+
+  const body = document.getElementById('memberReportBody');
+  if (!total) {
+    body.innerHTML = `<tr class="table-empty-row"><td colspan="5">هنوز عضوی ثبت نشده.</td></tr>`;
+    return;
+  }
+  body.innerHTML = members.map(m => `
+    <tr>
+      <td>${m.full_name}</td>
+      <td>${m.membership_code || '—'}</td>
+      <td>${m.phone || '—'}</td>
+      <td>${m.last_event_type === 'in' ? 'داخل باشگاه' : m.last_event_type === 'out' ? 'خارج شده' : 'هنوز تردد ندارد'}</td>
+      <td>${m.last_checkin_at ? timeAgo(m.last_checkin_at) : '—'}</td>
+    </tr>
   `).join('');
 }
 
+function exportMembersCsv() {
+  const rows = [['نام', 'کد عضویت', 'تلفن', 'وضعیت', 'آخرین تردد']];
+  members.forEach(m => rows.push([
+    m.full_name, m.membership_code || '', m.phone || '',
+    m.last_event_type === 'in' ? 'داخل باشگاه' : m.last_event_type === 'out' ? 'خارج شده' : 'بدون تردد',
+    m.last_checkin_at || '',
+  ]));
+  downloadCsv('gozaresh-aaza.csv', rows);
+}
+
+/* ---- گزارش‌ها: گزارش تردد (واقعی، از لاگ شناسایی) ---- */
+function renderAttendanceReport() {
+  const body = document.getElementById('attendanceReportBody');
+  if (!body) return;
+  const todays = recognitionLog.filter(e => isToday(e.created_at) && e.user_id);
+  if (!todays.length) {
+    body.innerHTML = `<tr class="table-empty-row"><td colspan="2">امروز هنوز ترددی ثبت نشده.</td></tr>`;
+    return;
+  }
+  body.innerHTML = todays.map(e => `
+    <tr><td>${e.full_name}</td><td>${new Date(e.created_at).toLocaleTimeString('fa-IR')}</td></tr>
+  `).join('');
+}
+
+function exportAttendanceCsv() {
+  const rows = [['عضو', 'زمان شناسایی']];
+  recognitionLog.filter(e => isToday(e.created_at) && e.user_id)
+    .forEach(e => rows.push([e.full_name, new Date(e.created_at).toLocaleTimeString('fa-IR')]));
+  downloadCsv('gozaresh-taraddod.csv', rows);
+}
+
+/* ============================================================ */
+/* داشبورد (واقعی، از داده‌های موجود)                               */
+/* ============================================================ */
+async function loadDashboard() {
+  await Promise.all([ensureMembersLoaded(), loadPending(), loadRecognitionLog()]);
+
+  const total = members.length;
+  const activeIn = members.filter(m => m.last_event_type === 'in').length;
+  const pendingCount = pendingItems.size;
+  const todayCount = recognitionLog.filter(e => isToday(e.created_at) && e.user_id).length;
+
+  document.getElementById('dashboardStats').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">کل اعضا</div></div>
+    <div class="stat-card"><div class="stat-value">${activeIn}</div><div class="stat-label">اعضای فعال (داخل باشگاه)</div></div>
+    <div class="stat-card"><div class="stat-value">${todayCount}</div><div class="stat-label">ترددهای امروز</div></div>
+    <div class="stat-card"><div class="stat-value">${pendingCount}</div><div class="stat-label">در انتظار پذیرش</div></div>
+  `;
+
+  const alerts = [];
+  if (pendingCount > 0) {
+    alerts.push({ type: 'warn', html: `<b>${pendingCount} نفر</b> در صف انتظار پذیرش منتظرند.` });
+  }
+  const alertsBox = document.getElementById('dashboardAlerts');
+  alertsBox.innerHTML = alerts.length
+    ? alerts.map(a => `<div class="alert-row ${a.type}"><span class="dot-mark"></span><span class="alert-text">${a.html}</span></div>`).join('')
+    : `<div class="alert-row ok"><span class="dot-mark"></span><span class="alert-text">هشداری وجود ندارد.</span></div>`;
+}
+
+/* ============================================================ */
+/* ثبت‌نام جدید (صف انتظار)                                        */
+/* ============================================================ */
 function openModal(id) {
   const item = pendingItems.get(id);
   if (!item) return;
@@ -836,18 +1744,11 @@ async function submitRegistration() {
   const phone = document.getElementById('phone').value.trim();
   const errorEl = document.getElementById('modalError');
 
-  if (full_name.length < 2) {
-    errorEl.textContent = 'لطفاً نام کامل را وارد کنید.';
-    return;
-  }
+  if (full_name.length < 2) { errorEl.textContent = 'لطفاً نام کامل را وارد کنید.'; return; }
 
   const res = await fetch(`${API_BASE}/api/queue/${activePendingId}/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      full_name,
-      phone: phone || null,
-    }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ full_name, phone: phone || null }),
   });
 
   if (!res.ok) {
@@ -858,7 +1759,7 @@ async function submitRegistration() {
 
   const result = await res.json();
   pendingItems.delete(activePendingId);
-  render();
+  renderQueue();
   closeModal();
   showToast(`ثبت‌نام <b>${result.full_name}</b> با موفقیت انجام شد — کد عضویت: <b>${result.membership_code}</b>`);
 }
@@ -866,10 +1767,10 @@ async function submitRegistration() {
 async function rejectPending(id) {
   await fetch(`${API_BASE}/api/queue/${id}`, { method: 'DELETE' });
   pendingItems.delete(id);
-  render();
+  renderQueue();
 }
 
-// ---- "این چهره متعلق به عضو موجود است" flow ----
+/* ---- "این چهره متعلق به عضو موجود است" ---- */
 let activeAssignPendingId = null;
 
 async function openAssignModal(id) {
@@ -880,7 +1781,7 @@ async function openAssignModal(id) {
   document.getElementById('assignSearch').value = '';
   document.getElementById('assignModalError').textContent = '';
   document.getElementById('assignOverlay').classList.add('open');
-  await loadMembers(); // fresh list, so search is accurate even if this is the first time opening
+  await loadMembers();
   renderAssignList();
 }
 
@@ -895,11 +1796,8 @@ function renderAssignList() {
     if (!query) return true;
     return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
   });
-
   document.getElementById('assignEmptyState').style.display = filtered.length ? 'none' : 'block';
-
-  const list = document.getElementById('assignList');
-  list.innerHTML = filtered.map(m => `
+  document.getElementById('assignList').innerHTML = filtered.map(m => `
     <div class="member-row" style="cursor:pointer" onclick="submitAssign(${m.id})">
       <img src="${m.photo_url || ''}" alt="${escapeAttr(m.full_name)}" onerror="this.style.visibility='hidden'" />
       <div class="member-info">
@@ -915,9 +1813,7 @@ async function submitAssign(userId) {
   errorEl.textContent = '';
 
   const res = await fetch(`${API_BASE}/api/queue/${activeAssignPendingId}/assign`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
   });
 
   if (!res.ok) {
@@ -928,46 +1824,41 @@ async function submitAssign(userId) {
 
   const result = await res.json();
   pendingItems.delete(activeAssignPendingId);
-  render();
+  renderQueue();
   closeAssignModal();
   showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
 }
 
-// ---- "لاگ زنده" تب تنظیمات (هر چهره‌ای که شناسایی شود، شناخته‌شده یا ناشناس) ----
-const RECOGNITION_LOG_CAP = 300; // keep memory/DOM bounded; older entries just scroll off
-let recognitionLog = []; // newest first
+/* ============================================================ */
+/* لاگ شناسایی (پذیرش > ثبت تردد  و  تنظیمات > لاگ سیستم)          */
+/* ============================================================ */
+const RECOGNITION_LOG_CAP = 300;
+let recognitionLog = [];
 let recognitionLogLoaded = false;
-let logVisible = false; // gated behind the "نمایش لاگ" button, not shown automatically
 
-async function toggleRecognitionLog() {
-  logVisible = !logVisible;
-  document.getElementById('recognitionLogWrap').style.display = logVisible ? 'block' : 'none';
-  document.getElementById('toggleLogBtn').textContent = logVisible ? 'پنهان کردن لاگ' : 'نمایش لاگ';
-
-  if (logVisible && !recognitionLogLoaded) {
+async function loadRecognitionLog() {
+  if (!recognitionLogLoaded) {
     try {
       const res = await fetch(`${API_BASE}/api/recognition-log`);
-      recognitionLog = await res.json(); // server already returns newest-first
+      recognitionLog = await res.json();
       recognitionLogLoaded = true;
-    } catch (e) {
-      // keep whatever we already had in memory (e.g. from live WS events) if the fetch fails
-    }
+    } catch (e) { /* keep whatever is already in memory from live WS events */ }
   }
-  if (logVisible) renderRecognitionLog();
+  renderRecognitionLogEverywhere();
 }
 
 function addRecognitionLogEntry(entry) {
-  // kept up to date in the background even while the log is hidden, so it
-  // shows fresh data instantly the moment "نمایش لاگ" is clicked
   recognitionLog.unshift(entry);
   if (recognitionLog.length > RECOGNITION_LOG_CAP) recognitionLog.length = RECOGNITION_LOG_CAP;
-  if (logVisible) renderRecognitionLog();
+  renderRecognitionLogEverywhere();
 }
 
-function renderRecognitionLog() {
-  document.getElementById('recognitionLogEmpty').style.display = recognitionLog.length ? 'none' : 'block';
-  const list = document.getElementById('recognitionLogList');
-  list.innerHTML = recognitionLog.map(e => `
+function renderLogInto(containerId, emptyId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const emptyEl = document.getElementById(emptyId);
+  if (emptyEl) emptyEl.style.display = recognitionLog.length ? 'none' : 'block';
+  container.innerHTML = recognitionLog.map(e => `
     <div class="feed-item log-item${e.user_id ? '' : ' log-unknown'}">
       <span><b>${e.full_name}</b> شناسایی شد</span>
       <span>${new Date(e.created_at).toLocaleTimeString('fa-IR')}</span>
@@ -975,11 +1866,16 @@ function renderRecognitionLog() {
   `).join('');
 }
 
-// ---- "پشتیبان‌گیری" تب تنظیمات ----
+function renderRecognitionLogEverywhere() {
+  renderLogInto('recognitionLogList', 'recognitionLogEmpty');
+  renderLogInto('settingsLogList', 'settingsLogEmpty');
+  renderAttendanceReport();
+}
+
+/* ============================================================ */
+/* پشتیبان‌گیری                                                    */
+/* ============================================================ */
 function downloadBackup() {
-  // a plain navigation, not fetch()+blob: the server sends
-  // Content-Disposition: attachment, so the browser just handles the "Save
-  // As" download natively and the SPA state is completely unaffected
   window.location.href = `${API_BASE}/api/backup`;
 }
 
@@ -995,18 +1891,10 @@ async function restoreBackup(event) {
   const confirmed = confirm(
     'این کار تمام اعضا، تردد، لاگ و عکس‌های فعلی را با محتوای این فایل بک‌آپ جایگزین می‌کند و قابل بازگشت نیست (به‌جز یک نسخهٔ امن از دیتابیس فعلی که سرور خودکار نگه می‌دارد). ادامه می‌دهید؟'
   );
-  if (!confirmed) {
-    input.value = '';
-    return;
-  }
+  if (!confirmed) { input.value = ''; return; }
 
   statusEl.style.color = 'var(--muted)';
   statusEl.textContent = 'در حال بازیابی... لطفاً صبر کنید و صفحه را نبندید.';
-
-  // this same tab is also connected to /ws/queue and will receive its OWN
-  // 'backup_restored' broadcast a moment after this fetch resolves --
-  // without this flag it would reload the page twice (once here, once from
-  // the WS handler below)
   restoringNow = true;
 
   const formData = new FormData();
@@ -1021,8 +1909,6 @@ async function restoreBackup(event) {
       statusEl.textContent = result.detail || 'بازیابی انجام نشد.';
       return;
     }
-    // simplest correct way to reflect a full data swap everywhere in the
-    // panel (queue/members/log all changed at once) is a clean reload
     alert('بازیابی با موفقیت انجام شد. صفحه رفرش می‌شود.');
     window.location.reload();
   } catch (e) {
@@ -1034,32 +1920,27 @@ async function restoreBackup(event) {
   }
 }
 
-// re-render "N seconds ago" labels periodically
-setInterval(render, 10000);
+/* ============================================================ */
+/* WebSocket زنده                                                 */
+/* ============================================================ */
+setInterval(renderQueue, 10000);
 
-// ---- WebSocket live updates ----
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws/queue`);
-  const dot = document.getElementById('wsDot');
-  const label = document.getElementById('wsLabel');
 
-  ws.onopen = () => { dot.classList.add('live'); label.textContent = 'اتصال زنده برقرار است'; };
-  ws.onclose = () => {
-    dot.classList.remove('live');
-    label.textContent = 'اتصال قطع شد، تلاش مجدد...';
-    setTimeout(connectWs, 2000);
-  };
+  ws.onopen = () => { wsLive = true; syncWsIndicator(); };
+  ws.onclose = () => { wsLive = false; syncWsIndicator(); setTimeout(connectWs, 2000); };
   ws.onerror = () => ws.close();
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
     if (msg.event === 'new_pending') {
       pendingItems.set(msg.id, msg);
-      render();
+      renderQueue();
     } else if (msg.event === 'pending_resolved') {
       pendingItems.delete(msg.id);
-      render();
+      renderQueue();
     } else if (msg.event === 'checkin') {
       const time = new Date(msg.checkin_at).toLocaleTimeString('fa-IR');
       const verb = msg.event_type === 'out' ? 'خارج شد' : 'وارد شد';
@@ -1069,29 +1950,17 @@ function connectWs() {
       if (member) {
         member.last_event_type = msg.event_type;
         member.last_checkin_at = msg.checkin_at;
-        if (activeTab === 'members') renderMembers();
+        renderMembers(); renderInOutList();
       }
     } else if (msg.event === 'member_deleted') {
       members = members.filter(m => m.id !== msg.id);
-      if (activeTab === 'members') renderMembers();
+      renderMembers(); renderInOutList();
     } else if (msg.event === 'member_updated') {
       const member = members.find(m => m.id === msg.id);
-      if (member) {
-        member.full_name = msg.full_name;
-        member.phone = msg.phone;
-        if (activeTab === 'members') renderMembers();
-      }
+      if (member) { member.full_name = msg.full_name; member.phone = msg.phone; renderMembers(); renderInOutList(); }
     } else if (msg.event === 'recognition_seen') {
-      addRecognitionLogEntry({
-        user_id: msg.user_id,
-        full_name: msg.full_name,
-        created_at: msg.created_at,
-      });
+      addRecognitionLogEntry({ user_id: msg.user_id, full_name: msg.full_name, created_at: msg.created_at });
     } else if (msg.event === 'backup_restored') {
-      // covers any OTHER open tab/session -- the tab that triggered the
-      // restore (restoringNow === true there) already reloads itself
-      // directly from restoreBackup() above, so it skips this to avoid a
-      // double alert/reload
       if (restoringNow) return;
       alert('یک بازیابی بک‌آپ روی سرور انجام شد. صفحه رفرش می‌شود.');
       window.location.reload();
