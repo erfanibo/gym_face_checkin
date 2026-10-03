@@ -24,3 +24,7 @@ static/user_photos/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Internal working notes — status/progress log for whoever (person or agent)
+# continues this project; intentionally local-only, never published.
+UPDATE.md
