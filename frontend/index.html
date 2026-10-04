@@ -510,15 +510,16 @@
 
       <!-- ============ پذیرش > تنظیمات پذیرش: رفتار ثبت تردد ============ -->
       <div class="page" data-page="reception-settings-behavior" style="--acc:var(--c-reception)">
-        <p class="block-hint">این مقادیر هم‌اکنون از تنظیمات سرور خوانده می‌شوند (فقط نمایشی). تغییر آن‌ها از همین صفحه، گام بعدی است.</p>
+        <p class="block-hint">این مقادیر مستقیماً روی موتور تشخیص چهره اثر می‌گذارند و بلافاصله بعد از ذخیره فعال می‌شوند (بدون نیاز به ری‌استارت سرویس).</p>
         <div class="form-grid">
-          <div class="field"><label>فاصله‌ی ثبت ورود/خروج یکسان (دقیقه)</label><input type="number" value="5" disabled /></div>
-          <div class="field"><label>دیبانس لاگ شناسایی (ثانیه)</label><input type="number" value="4" disabled /></div>
-          <div class="field"><label>پنجره‌ی آنتی‌اسپم صف انتظار (دقیقه)</label><input type="number" value="2" disabled /></div>
-          <div class="field"><label>حداکثر نمونه‌ی چهره به ازای هر عضو</label><input type="number" value="15" disabled /></div>
+          <div class="field"><label>فاصله‌ی ثبت ورود/خروج یکسان (دقیقه)</label><input id="behAttendanceCooldown" type="number" min="1" max="120" /></div>
+          <div class="field"><label>دیبانس لاگ شناسایی (ثانیه)</label><input id="behRecognitionDebounce" type="number" min="1" max="60" /></div>
+          <div class="field"><label>پنجره‌ی آنتی‌اسپم صف انتظار (دقیقه)</label><input id="behPendingDedupWindow" type="number" min="1" max="60" /></div>
+          <div class="field"><label>حداکثر نمونه‌ی چهره به ازای هر عضو</label><input id="behMaxFaceSamples" type="number" min="1" max="100" /></div>
         </div>
+        <div class="error-msg" id="behaviorSettingsError"></div>
         <div class="modal-actions" style="margin-top:18px; max-width:220px;">
-          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+          <button class="btn-primary" id="behaviorSettingsSaveBtn" onclick="saveBehaviorSettings()">ذخیره تغییرات</button>
         </div>
       </div>
 
@@ -1047,6 +1048,7 @@ const PAGE_LOADERS = {
   'reception-face': loadPending,
   'reception-checkin': () => { loadRecognitionLog(); },
   'reception-inout': async () => { await ensureMembersLoaded(); renderInOutList(); },
+  'reception-settings-behavior': loadBehaviorSettings,
   'members-list': loadMembers,
   'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
   'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
@@ -1715,6 +1717,51 @@ async function endMembershipNow() {
   }
   applyMembershipUpdate(await res.json());
   showToast('عضویت پایان یافت.');
+}
+
+/* ---- پذیرش > تنظیمات پذیرش: رفتار ثبت تردد (واقعی) ---- */
+async function loadBehaviorSettings() {
+  const btn = document.getElementById('behaviorSettingsSaveBtn');
+  const errorEl = document.getElementById('behaviorSettingsError');
+  errorEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/settings/behavior`);
+    if (!res.ok) { errorEl.textContent = 'بارگذاری تنظیمات انجام نشد.'; return; }
+    const s = await res.json();
+    document.getElementById('behAttendanceCooldown').value = s.attendance_cooldown_minutes;
+    document.getElementById('behRecognitionDebounce').value = s.recognition_log_debounce_seconds;
+    document.getElementById('behPendingDedupWindow').value = s.pending_dedup_window_minutes;
+    document.getElementById('behMaxFaceSamples').value = s.max_face_samples_per_member;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveBehaviorSettings() {
+  const errorEl = document.getElementById('behaviorSettingsError');
+  errorEl.textContent = '';
+
+  const payload = {
+    attendance_cooldown_minutes: parseInt(document.getElementById('behAttendanceCooldown').value, 10),
+    recognition_log_debounce_seconds: parseInt(document.getElementById('behRecognitionDebounce').value, 10),
+    pending_dedup_window_minutes: parseInt(document.getElementById('behPendingDedupWindow').value, 10),
+    max_face_samples_per_member: parseInt(document.getElementById('behMaxFaceSamples').value, 10),
+  };
+  if (Object.values(payload).some(v => !Number.isInteger(v) || v < 1)) {
+    errorEl.textContent = 'همه‌ی مقادیر باید عدد صحیح و حداقل ۱ باشند.';
+    return;
+  }
+
+  const res = await fetch(`${API_BASE}/api/settings/behavior`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ذخیره‌ی تنظیمات انجام نشد.';
+    return;
+  }
+  showToast('تنظیمات رفتار ثبت تردد ذخیره شد و بلافاصله فعال شد.');
 }
 
 /* ---- اعضا: جستجوی پیشرفته (واقعی، روی داده‌ی موجود) ---- */

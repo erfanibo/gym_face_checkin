@@ -10,7 +10,7 @@ from . import auth, config
 from .database import init_db
 from .face_engine import FaceEngine
 from .routers import auth as auth_router
-from .routers import backup, logs, queue, users, workouts
+from .routers import backup, logs, queue, settings, users, workouts
 from .ws_manager import manager
 
 
@@ -18,6 +18,7 @@ from .ws_manager import manager
 async def lifespan(app: FastAPI):
     init_db()
     auth.ensure_manager_password_seeded()
+    settings.apply_persisted_overrides()  # قبل از start() فیس‌انجین، نه بعدش
 
     loop = asyncio.get_running_loop()
     engine = FaceEngine(loop)
@@ -56,6 +57,7 @@ app.include_router(users.router)
 app.include_router(logs.router)
 app.include_router(backup.router)
 app.include_router(workouts.router)
+app.include_router(settings.router)
 
 
 @app.websocket("/ws/queue")

@@ -125,3 +125,21 @@ class WorkoutPlanOut(BaseModel):
     full_name: Optional[str] = None  # only filled in on the manager's view
     updated_at: Optional[str] = None
     items: list[WorkoutItemOut]
+
+
+# ---------------------------------------------------------------------------
+# تنظیمات پذیرش > رفتار ثبت تردد (routers/settings.py)
+# ---------------------------------------------------------------------------
+class BehaviorSettings(BaseModel):
+    attendance_cooldown_minutes: int = Field(
+        ..., ge=1, le=120, description="فاصله‌ی ثبت ورود/خروج یکسان برای یک عضو، به دقیقه"
+    )
+    recognition_log_debounce_seconds: int = Field(
+        ..., ge=1, le=60, description="حداقل فاصله بین دو خط لاگ زنده برای همان عضو، به ثانیه"
+    )
+    pending_dedup_window_minutes: int = Field(
+        ..., ge=1, le=60, description="پنجره‌ی آنتی‌اسپم صف انتظار، به دقیقه"
+    )
+    max_face_samples_per_member: int = Field(
+        ..., ge=1, le=100, description="حداکثر نمونه‌ی چهره به ازای هر عضو"
+    )
