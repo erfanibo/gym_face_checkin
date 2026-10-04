@@ -25,6 +25,7 @@
     --c-finance: #eea13c;        --c-finance-dim: #3a2a12;
     --c-reports: #c572ec;        --c-reports-dim: #2c1f3a;
     --c-settings: #ef5d79;       --c-settings-dim: #3a1b22;
+    --c-coach: #2bb8c4;          --c-coach-dim: #0f2f33;
   }
   * { box-sizing: border-box; }
   body {
@@ -653,6 +654,20 @@
         </div>
       </div>
 
+      <!-- ============ مربی: برنامه‌ی تمرینی ============ -->
+      <div class="page" data-page="coach-workout" style="--acc:var(--c-coach)">
+        <div class="section-title">
+          <h2>انتخاب عضو برای برنامه‌ی تمرینی</h2>
+          <span class="count-badge" id="coachWorkoutCount">0</span>
+        </div>
+        <p class="block-hint">عضو مورد نظر را جستجو کنید و روی «تعریف / ویرایش برنامه» بزنید.</p>
+        <div class="search-box">
+          <input id="coachWorkoutSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderCoachWorkoutList()" />
+        </div>
+        <div id="coachWorkoutList" class="member-list"></div>
+        <div id="coachWorkoutEmptyState" class="empty" style="display:none">عضوی پیدا نشد.</div>
+      </div>
+
       <!-- ============ مالی و شهریه: تعرفه‌ها و پلن‌ها ============ -->
       <div class="page" data-page="finance-plans" style="--acc:var(--c-finance)">
         <div class="section-title">
@@ -960,6 +975,8 @@ const ICONS = {
     <path d="M3 11h18"/><circle cx="16.3" cy="14.5" r="1.2"/></svg>`,
   reports: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="11" width="3.4" height="9" rx="1"/><rect x="10.3" y="5" width="3.4" height="15" rx="1"/><rect x="16.6" y="14" width="3.4" height="6" rx="1"/></svg>`,
+  coach: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7.5v9"/><path d="M2 9.5v5"/><path d="M20 7.5v9"/><path d="M22 9.5v5"/><path d="M7 12h10"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="3"/><path d="M19.4 12a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4.7a7.3 7.3 0 0 0-1.9-1.1l-.4-2.6H9.2l-.4 2.6a7.3 7.3 0 0 0-1.9 1.1l-2.4-.7-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-.7a7.3 7.3 0 0 0 1.9 1.1l.4 2.6h5.6l.4-2.6a7.3 7.3 0 0 0 1.9-1.1l2.4.7 2-3.4-2-1.6c.07-.4.1-.8.1-1.2Z"/></svg>`,
   chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
@@ -991,6 +1008,10 @@ const NAV = [
       { id: 'members-renew', label: 'تمدید / پایان عضویت', page: 'members-renew', title: 'تمدید / پایان عضویت', subtitle: 'مدیریت اعضای باشگاه' },
       { id: 'members-search', label: 'جستجوی پیشرفته', page: 'members-search', title: 'جستجوی پیشرفته', subtitle: 'مدیریت اعضای باشگاه' },
       { id: 'members-report', label: 'گزارش اعضا', page: 'members-report', title: 'گزارش اعضا', subtitle: 'مدیریت اعضای باشگاه' },
+  ]},
+
+  { id: 'coach', label: 'مربی', accent: 'coach', icon: ICONS.coach, children: [
+      { id: 'coach-workout', label: 'برنامه‌ی تمرینی', page: 'coach-workout', title: 'برنامه‌ی تمرینی', subtitle: 'انتخاب عضو و تعریف/ویرایش برنامه‌ی تمرینی' },
   ]},
 
   { id: 'finance', label: 'مالی و شهریه', accent: 'finance', icon: ICONS.finance, children: [
@@ -1030,6 +1051,7 @@ const PAGE_LOADERS = {
   'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
   'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
   'members-report': async () => { await ensureMembersLoaded(); renderMemberReport(); },
+  'coach-workout': async () => { await ensureMembersLoaded(); renderCoachWorkoutList(); },
   'reports-members': async () => { await ensureMembersLoaded(); renderMemberReport(); },
   'reports-attendance': () => { loadRecognitionLog(); renderAttendanceReport(); },
   'settings-log': () => { loadRecognitionLog(); },
@@ -1587,8 +1609,23 @@ function renderMembers() {
     <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
     <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
     <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
-    <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
     <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
+  `)).join('');
+}
+
+/* ---- مربی: برنامه‌ی تمرینی (انتخاب عضو) ---- */
+function renderCoachWorkoutList() {
+  const query = (document.getElementById('coachWorkoutSearch').value || '').trim().toLowerCase();
+  const filtered = members.filter(m => {
+    if (!query) return true;
+    return [m.full_name, m.phone, m.membership_code].some(f => (f || '').toLowerCase().includes(query));
+  });
+
+  document.getElementById('coachWorkoutCount').textContent = members.length;
+  document.getElementById('coachWorkoutEmptyState').style.display = filtered.length ? 'none' : 'block';
+
+  document.getElementById('coachWorkoutList').innerHTML = filtered.map(m => memberRowHtml(m, `
+    <button class="btn-sm btn-primary" onclick="openWorkoutModal(${m.id})">تعریف / ویرایش برنامه</button>
   `)).join('');
 }
 
@@ -1702,7 +1739,6 @@ function renderAdvancedSearch() {
   document.getElementById('advSearchEmpty').style.display = filtered.length ? 'none' : 'block';
   document.getElementById('advSearchList').innerHTML = filtered.map(m => memberRowHtml(m, `
     <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
-    <button class="btn-sm btn-secondary" onclick="openWorkoutModal(${m.id})">برنامه‌ی تمرینی</button>
   `)).join('');
 }
 
