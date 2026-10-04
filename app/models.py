@@ -45,6 +45,11 @@ class RegisteredUserOut(BaseModel):
     created_at: str
     last_checkin_at: Optional[str] = None
     last_event_type: Optional[str] = None  # 'in' | 'out' | None (هرگز تردد ثبت نشده)
+    membership_expires_at: Optional[str] = None  # None = تاریخ پایانی هنوز برایش ثبت نشده (نه «منقضی»)
+
+
+class RenewMembershipRequest(BaseModel):
+    months: int = Field(..., description="مدت تمدید به ماه؛ باید یکی از ۱، ۳، ۶ یا ۱۲ باشد")
 
 
 class UpdateUserRequest(BaseModel):

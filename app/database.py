@@ -24,13 +24,20 @@ _connection: sqlite3.Connection | None = None
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS registered_users (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    membership_code     TEXT UNIQUE,   -- auto-generated random number, see generate_unique_membership_code()
-    full_name           TEXT NOT NULL,
-    phone               TEXT,
-    encoding            BLOB NOT NULL,   -- 128 x float64, see face_engine.encoding_to_blob
-    photo_path          TEXT,
-    created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    membership_code        TEXT UNIQUE,   -- auto-generated random number, see generate_unique_membership_code()
+    full_name               TEXT NOT NULL,
+    phone                   TEXT,
+    encoding                BLOB NOT NULL,   -- 128 x float64, see face_engine.encoding_to_blob
+    photo_path              TEXT,
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    -- NULL means "no expiry date has ever been set for this member" (e.g.
+    -- anyone registered before this feature existed, or never renewed) --
+    -- the admin panel treats that as neutral, NOT expired. Set by the
+    -- membership renew/end endpoints in routers/users.py, as a full UTC
+    -- ISO-8601 timestamp (to match the convention used everywhere else in
+    -- this project, see face_engine.py).
+    membership_expires_at   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pending_queue (
@@ -200,6 +207,10 @@ def _migrate(conn: sqlite3.Connection):
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(attendance_log)")}
     if "event_type" not in cols:
         conn.execute("ALTER TABLE attendance_log ADD COLUMN event_type TEXT NOT NULL DEFAULT 'in'")
+
+    user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(registered_users)")}
+    if "membership_expires_at" not in user_cols:
+        conn.execute("ALTER TABLE registered_users ADD COLUMN membership_expires_at TEXT")
 
 
 def _migrate_recognition_log_nullable(conn: sqlite3.Connection):
