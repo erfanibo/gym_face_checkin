@@ -864,14 +864,15 @@
 
       <!-- ============ تنظیمات: اطلاعات باشگاه ============ -->
       <div class="page" data-page="settings-info" style="--acc:var(--c-settings)">
-        <p class="block-hint">این اطلاعات هنوز ذخیره نمی‌شوند؛ فقط برای پیش‌نمایش فرم است.</p>
+        <p class="block-hint">این اطلاعات فقط برای مرجع خودِ شماست؛ هنوز جای دیگری از پنل (مثلاً عنوان صفحه یا صفحه‌ی ورود) از اینجا خوانده نمی‌شود.</p>
         <div class="form-grid">
-          <div class="field"><label>نام باشگاه</label><input type="text" value="باشگاه گلادیاتور" disabled /></div>
-          <div class="field"><label>شماره تماس</label><input type="tel" placeholder="021xxxxxxx" disabled /></div>
-          <div class="field"><label>آدرس</label><input type="text" placeholder="آدرس باشگاه" disabled /></div>
+          <div class="field"><label>نام باشگاه</label><input id="clubInfoName" type="text" /></div>
+          <div class="field"><label>شماره تماس</label><input id="clubInfoPhone" type="tel" placeholder="021xxxxxxx" /></div>
+          <div class="field"><label>آدرس</label><input id="clubInfoAddress" type="text" placeholder="آدرس باشگاه" /></div>
         </div>
+        <div class="error-msg" id="clubInfoError"></div>
         <div class="modal-actions" style="margin-top:18px; max-width:220px;">
-          <button class="btn-primary" disabled>ذخیره تغییرات</button>
+          <button class="btn-primary" id="clubInfoSaveBtn" onclick="saveClubInfo()">ذخیره تغییرات</button>
         </div>
       </div>
 
@@ -1049,6 +1050,7 @@ const PAGE_LOADERS = {
   'reception-checkin': () => { loadRecognitionLog(); },
   'reception-inout': async () => { await ensureMembersLoaded(); renderInOutList(); },
   'reception-settings-behavior': loadBehaviorSettings,
+  'settings-info': loadClubInfo,
   'members-list': loadMembers,
   'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
   'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
@@ -1762,6 +1764,50 @@ async function saveBehaviorSettings() {
     return;
   }
   showToast('تنظیمات رفتار ثبت تردد ذخیره شد و بلافاصله فعال شد.');
+}
+
+/* ---- تنظیمات: اطلاعات باشگاه (واقعی) ---- */
+async function loadClubInfo() {
+  const btn = document.getElementById('clubInfoSaveBtn');
+  const errorEl = document.getElementById('clubInfoError');
+  errorEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/settings/club-info`);
+    if (!res.ok) { errorEl.textContent = 'بارگذاری اطلاعات باشگاه انجام نشد.'; return; }
+    const info = await res.json();
+    document.getElementById('clubInfoName').value = info.club_name || '';
+    document.getElementById('clubInfoPhone').value = info.phone || '';
+    document.getElementById('clubInfoAddress').value = info.address || '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveClubInfo() {
+  const errorEl = document.getElementById('clubInfoError');
+  errorEl.textContent = '';
+
+  const club_name = document.getElementById('clubInfoName').value.trim();
+  if (club_name.length < 2) {
+    errorEl.textContent = 'نام باشگاه باید حداقل ۲ کاراکتر باشد.';
+    return;
+  }
+  const payload = {
+    club_name,
+    phone: document.getElementById('clubInfoPhone').value.trim() || null,
+    address: document.getElementById('clubInfoAddress').value.trim() || null,
+  };
+
+  const res = await fetch(`${API_BASE}/api/settings/club-info`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ذخیره‌ی اطلاعات باشگاه انجام نشد.';
+    return;
+  }
+  showToast('اطلاعات باشگاه ذخیره شد.');
 }
 
 /* ---- اعضا: جستجوی پیشرفته (واقعی، روی داده‌ی موجود) ---- */

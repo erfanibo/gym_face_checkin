@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends
 
 from .. import auth, config
 from ..database import get_setting, set_setting
-from ..models import BehaviorSettings
+from ..models import BehaviorSettings, ClubInfo
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_manager)])
 
@@ -82,3 +82,44 @@ def update_behavior_settings(body: BehaviorSettings):
     set_setting(_MAX_FACE_SAMPLES_KEY, str(config.MAX_FACE_SAMPLES_PER_MEMBER))
 
     return _current_settings()
+
+
+# ---------------------------------------------------------------------------
+# تنظیمات > اطلاعات باشگاه -- دومین placeholder که همین دور وصل شد.
+# برخلاف بخش بالا، این مقادیر روی هیچ منطقی (face_engine یا جای دیگه) اثر
+# ندارند -- صرفاً اطلاعات تماس/آدرس برای مرجع خودِ مدیر، همین‌جا ذخیره و
+# نمایش داده می‌شوند. عمداً جایی دیگر (عنوان صفحه، صفحه‌ی ورود، نوار کناری)
+# به این مقدار وصل نشده -- آن‌ها پیش از لاگین رندر می‌شوند و این مسیر پشت
+# require_manager است؛ اگر بعداً لازم شد، باید یک مسیر GET عمومی جدا اضافه شود.
+# ---------------------------------------------------------------------------
+_CLUB_NAME_KEY = "club_info_name"
+_CLUB_PHONE_KEY = "club_info_phone"
+_CLUB_ADDRESS_KEY = "club_info_address"
+
+_DEFAULT_CLUB_NAME = "باشگاه گلادیاتور"  # همونی که فعلاً هاردکد توی frontend/index.html هم هست
+
+
+def _current_club_info() -> ClubInfo:
+    # "" و None یکی‌ان از نظر معنایی (یعنی هنوز چیزی ثبت نشده) -- ذخیره‌شده
+    # به‌صورت "" است (چون app_settings.value ستونش NOT NULL)، اینجا برای
+    # خروجی API دوباره به None تبدیل می‌شود تا فرانت یکدست رفتار کند.
+    phone = get_setting(_CLUB_PHONE_KEY) or None
+    address = get_setting(_CLUB_ADDRESS_KEY) or None
+    return ClubInfo(
+        club_name=get_setting(_CLUB_NAME_KEY) or _DEFAULT_CLUB_NAME,
+        phone=phone,
+        address=address,
+    )
+
+
+@router.get("/club-info", response_model=ClubInfo)
+def get_club_info():
+    return _current_club_info()
+
+
+@router.put("/club-info", response_model=ClubInfo)
+def update_club_info(body: ClubInfo):
+    set_setting(_CLUB_NAME_KEY, body.club_name)
+    set_setting(_CLUB_PHONE_KEY, body.phone or "")
+    set_setting(_CLUB_ADDRESS_KEY, body.address or "")
+    return _current_club_info()

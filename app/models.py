@@ -143,3 +143,12 @@ class BehaviorSettings(BaseModel):
     max_face_samples_per_member: int = Field(
         ..., ge=1, le=100, description="حداکثر نمونه‌ی چهره به ازای هر عضو"
     )
+
+
+# ---------------------------------------------------------------------------
+# تنظیمات > اطلاعات باشگاه (routers/settings.py)
+# ---------------------------------------------------------------------------
+class ClubInfo(BaseModel):
+    club_name: str = Field(..., min_length=2, description="نام باشگاه")
+    phone: Optional[str] = Field(None, description="شماره تماس باشگاه")
+    address: Optional[str] = Field(None, description="آدرس باشگاه")
