@@ -11,6 +11,7 @@ from ..face_engine import add_face_sample, blob_to_encoding
 from ..models import (
     AssignPendingRequest,
     AssignPendingResponse,
+    CameraStatus,
     PendingItem,
     RegisterPendingRequest,
     RegisteredUserOut,
@@ -66,6 +67,18 @@ def list_pending():
         )
         rows = cur.fetchall()
     return [_pending_row_to_item(r) for r in rows]
+
+
+@router.get("/camera-status", response_model=CameraStatus)
+def get_camera_status(request: Request):
+    """
+    One-shot read of whether the camera is currently connected -- for the
+    panel's initial load (e.g. right after login, before any page is open),
+    since after that the "camera_status" WebSocket event (see
+    FaceEngine._set_camera_connected) keeps it live without polling.
+    """
+    engine = request.app.state.face_engine
+    return CameraStatus(connected=engine.camera_connected)
 
 
 @router.post("/{pending_id}/register", response_model=RegisteredUserOut)

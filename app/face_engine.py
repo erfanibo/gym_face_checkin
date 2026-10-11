@@ -118,6 +118,13 @@ class FaceEngine:
         self._known_sample_user_ids: list[int] = []
         self._known_sample_encodings: list[np.ndarray] = []
 
+        # True once cv2.VideoCapture is actually open and giving frames.
+        # Plain bool, no lock -- same as `_running`/`_video` below, read from
+        # request-handling threads but only ever WRITTEN from this class's own
+        # background thread, and CPython's GIL makes a single attribute
+        # read/write atomic enough for a status flag like this.
+        self.camera_connected: bool = False
+
         self._pending_cache: list[dict] = []  # {id, encodings: [..], last_seen}
 
         # user_id -> {"at": datetime, "type": "in"|"out"} for the LAST logged
@@ -236,19 +243,42 @@ class FaceEngine:
     # main loop
     # ------------------------------------------------------------------ #
     def _run_loop(self):
-        video = cv2.VideoCapture(config.CAMERA_INDEX)
-        if not video.isOpened():
-            print(f"[face_engine] ERROR: could not open camera index {config.CAMERA_INDEX}")
-            self._running = False
-            return
-        self._video = video  # so _capture_burst_frames (called from _process_frame) can read more
-
+        """
+        Outer loop owns "is a camera connected at all"; never exits just
+        because one isn't, right now. No camera at startup (unplugged,
+        wrong CAMERA_INDEX, `docker compose up` without the camera override --
+        see docker-compose.camera.yml) used to permanently kill this thread
+        (self._running = False) -- the rest of the app still ran fine, but
+        recognition was silently dead forever with no indication why. Now it
+        just keeps retrying every config.CAMERA_RETRY_SECONDS and reports its
+        state via self.camera_connected (see _set_camera_connected), which
+        the panel shows as a banner on the reception pages.
+        """
+        video = None
         frame_count = 0
         try:
             while self._running:
+                if video is None:
+                    video = self._try_open_camera()
+                    if video is None:
+                        time.sleep(config.CAMERA_RETRY_SECONDS)
+                        continue
+                    self._video = video  # so _capture_burst_frames (via _process_frame) can read more
+
                 ok, frame = video.read()
                 if not ok:
-                    time.sleep(0.05)
+                    # A single dropped frame happens occasionally even on a
+                    # healthy camera (skip it, keep going); but if the device
+                    # itself is no longer open, this is an actual disconnect
+                    # (unplugged mid-run) -- drop it and go back to the retry
+                    # branch above instead of spinning on a dead handle forever.
+                    if not video.isOpened():
+                        video.release()
+                        video = None
+                        self._video = None
+                        self._set_camera_connected(False)
+                    else:
+                        time.sleep(0.05)
                     continue
 
                 frame_count += 1
@@ -261,7 +291,35 @@ class FaceEngine:
                     print(f"[face_engine] frame processing error: {exc}")
         finally:
             self._video = None
+            if video is not None:
+                video.release()
+            self._set_camera_connected(False)
+
+    def _try_open_camera(self) -> cv2.VideoCapture | None:
+        """One attempt to (re)open config.CAMERA_INDEX. Returns the opened
+        capture, or None (and flips camera_connected to False) if it's not
+        available right now -- caller just waits and retries."""
+        video = cv2.VideoCapture(config.CAMERA_INDEX)
+        if not video.isOpened():
             video.release()
+            self._set_camera_connected(False)
+            return None
+        self._set_camera_connected(True)
+        return video
+
+    def _set_camera_connected(self, connected: bool):
+        """Edge-triggered: only logs/broadcasts on an actual change, so the
+        retry loop polling every CAMERA_RETRY_SECONDS doesn't spam the log or
+        the WebSocket while the camera stays missing."""
+        if connected == self.camera_connected:
+            return
+        self.camera_connected = connected
+        if connected:
+            print(f"[face_engine] camera index {config.CAMERA_INDEX} connected")
+        else:
+            print(f"[face_engine] camera index {config.CAMERA_INDEX} not available "
+                  f"-- will keep retrying every {config.CAMERA_RETRY_SECONDS}s")
+        self._broadcast_soon({"event": "camera_status", "connected": connected})
 
     def _detect(self, frame: np.ndarray) -> tuple[list[tuple], list[np.ndarray]]:
         """Downscale + detect + encode. Shared by the primary frame and every

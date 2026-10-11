@@ -244,6 +244,17 @@
   .alert-row .alert-text { flex: 1; }
   .alert-row .alert-text b { font-weight: 700; }
 
+  /* camera-disconnected banner — shown across every صفحه‌ی زیرمجموعه‌ی پذیرش */
+  .camera-status-banner {
+    display: none; align-items: flex-start; gap: 12px;
+    margin-bottom: 20px; padding: 14px 16px; border-radius: 12px;
+    background: var(--warn-dim, rgba(242,161,84,0.1)); border: 1px solid rgba(242,161,84,0.4);
+  }
+  .camera-status-banner.show { display: flex; }
+  .camera-status-banner .cb-icon { width: 20px; height: 20px; color: var(--warn); flex-shrink: 0; margin-top: 1px; }
+  .camera-status-banner .cb-title { font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+  .camera-status-banner .cb-text { color: var(--muted); font-size: 12.8px; line-height: 1.9; }
+
   /* -------------------------------------------- */
   /* login screen                                  */
   /* -------------------------------------------- */
@@ -428,6 +439,16 @@
     </div>
 
     <div class="content-body">
+
+      <div class="camera-status-banner" id="cameraStatusBanner">
+        <svg class="cb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3l18 18"/><path d="M21 7l-5 3.2V8a2 2 0 0 0-2-2H9.8"/><path d="M3 8v9a2 2 0 0 0 2 2h9.2"/>
+        </svg>
+        <div>
+          <div class="cb-title">دوربین وصل نیست</div>
+          <div class="cb-text">سیستم بدون دوربین هم اجرا می‌شود، ولی تا وصل‌شدن دوربین، تشخیص چهره و ثبت تردد خودکار کار نمی‌کند. خودش هر چند ثانیه یک‌بار دوباره تلاش می‌کند — نیازی به ری‌استارت سرویس نیست.</div>
+        </div>
+      </div>
 
       <!-- ============ داشبورد ============ -->
       <div class="page" data-page="dashboard" style="--acc:var(--c-dashboard)">
@@ -959,6 +980,7 @@ let restoringNow = false;
 const pendingItems = new Map();
 let members = [];
 let appStarted = false;
+let cameraConnected = null; // null = not known yet (before the first load/WS event)
 
 /* ============================================================ */
 /* icons (inline SVG, no emoji)                                  */
@@ -1154,6 +1176,7 @@ function goToPage(leafId) {
   document.getElementById('pageAccentBar').style.background = acc || 'var(--accent)';
 
   renderHeaderActions(node.page);
+  updateCameraBanner();
 
   const loader = PAGE_LOADERS[leafId];
   if (loader) loader();
@@ -1234,7 +1257,28 @@ function showApp() {
     buildNav();
     goToPage('dashboard');
     connectWs();
+    loadCameraStatus();
   }
+}
+
+/* ---- پذیرش: نوار هشدار «دوربین وصل نیست» ---- */
+async function loadCameraStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/queue/camera-status`);
+    if (!res.ok) return; // not fatal -- the WS event will still keep it live from here on
+    const data = await res.json();
+    cameraConnected = data.connected;
+  } catch {
+    // offline for a moment -- leave cameraConnected as-is (null stays hidden)
+  } finally {
+    updateCameraBanner();
+  }
+}
+
+function updateCameraBanner() {
+  const banner = document.getElementById('cameraStatusBanner');
+  const onReceptionPage = !!activeLeafId && activeLeafId.startsWith('reception');
+  banner.classList.toggle('show', onReceptionPage && cameraConnected === false);
 }
 
 async function submitLogin() {
@@ -2167,6 +2211,9 @@ function connectWs() {
       applyMembershipUpdate({ id: msg.id, membership_expires_at: msg.membership_expires_at });
     } else if (msg.event === 'recognition_seen') {
       addRecognitionLogEntry({ user_id: msg.user_id, full_name: msg.full_name, created_at: msg.created_at });
+    } else if (msg.event === 'camera_status') {
+      cameraConnected = msg.connected;
+      updateCameraBanner();
     } else if (msg.event === 'backup_restored') {
       if (restoringNow) return;
       alert('یک بازیابی بک‌آپ روی سرور انجام شد. صفحه رفرش می‌شود.');

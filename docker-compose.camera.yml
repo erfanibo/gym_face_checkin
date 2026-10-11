@@ -1,0 +1,23 @@
+# Camera passthrough override -- use this ONLY on the Linux machine that
+# actually sits next to the door camera (Docker Desktop on macOS/Windows
+# can't pass a webcam through at all, see README.md).
+#
+# `docker-compose.yml` on its own has NO `devices:` entry, on purpose, so it
+# always starts even on a machine with no camera (a dev laptop, a VM for
+# testing other features, CI, ...). On the real gym PC, merge this file in
+# too so the camera is actually passed into the container, either by:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.camera.yml up --build -d
+#
+# or, simpler, by copying it once so Compose merges it automatically with no
+# extra flags needed on every future `up`/`down`:
+#
+#   cp docker-compose.camera.yml docker-compose.override.yml
+#   docker compose up --build -d
+#
+# If your camera isn't /dev/video0, check with `ls /dev/video*` on the host
+# and update BOTH the line below and CAMERA_INDEX in docker-compose.yml.
+services:
+  gym-face-checkin:
+    devices:
+      - "/dev/video0:/dev/video0"

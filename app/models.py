@@ -17,6 +17,10 @@ class RegisterPendingRequest(BaseModel):
     # by the operator.
 
 
+class CameraStatus(BaseModel):
+    connected: bool = Field(..., description="آیا FaceEngine همین الان دوربین را باز و در حال خواندن فریم دارد")
+
+
 class AssignPendingRequest(BaseModel):
     user_id: int = Field(..., description="شناسه‌ی عضو موجودی که این چهره در صف انتظار متعلق به اوست")
 

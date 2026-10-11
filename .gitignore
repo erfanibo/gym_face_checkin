@@ -10,6 +10,11 @@ __pycache__/
 # Environment / secrets
 .env
 
+# Local, machine-specific Compose override (e.g. the camera device
+# passthrough on the one PC that sits next to the door camera -- see
+# docker-compose.camera.yml). Never shared across machines, so never committed.
+docker-compose.override.yml
+
 # Project data — this is real people's biometric data + a live database,
 # it must never end up in version control (also see README > Privacy note)
 gym_face.db

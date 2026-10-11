@@ -21,8 +21,9 @@ services:
       - MANAGER_INITIAL_PASSWORD=${MANAGER_INITIAL_PASSWORD:-changeme}
     volumes:
       - ./data:/app/data
-    devices:
-      # Linux-only: passes the host's webcam device node into the container.
-      # If your camera isn't /dev/video0, check with `ls /dev/video*` on the
-      # host and update this line (and CAMERA_INDEX above if needed).
-      - "/dev/video0:/dev/video0"
+    # NOTE: no `devices:` camera passthrough here on purpose -- see
+    # docker-compose.camera.yml. This base file always starts, with or
+    # without a webcam attached to the host (the app itself handles a
+    # missing/disconnected camera gracefully too, see app/face_engine.py);
+    # add the camera override only on the machine that actually sits next
+    # to the door camera.

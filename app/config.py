@@ -23,6 +23,18 @@ PROCESS_EVERY_N_FRAMES = 5       # only run face detection on 1 out of every N g
 FRAME_RESIZE_SCALE = 0.25        # frame is downscaled by this factor before detection
                                   # (4x smaller frame ~= 16x faster HOG/CNN detection)
 
+# If no camera is found at CAMERA_INDEX (not plugged in, container started
+# without the device passed through, wrong index, ...), FaceEngine does NOT
+# crash or give up -- it just sits in a retry loop, trying to (re)open the
+# camera every this-many seconds, and reports camera_connected=False in the
+# meantime (surfaced to the panel -- see app/routers/queue.py's
+# /camera-status and the "camera_status" WebSocket event). This means the
+# whole app (and `docker compose up`, once docker-compose.yml's camera
+# `devices:` passthrough is also made optional -- see docker-compose.camera.yml)
+# runs fine on a machine with no camera at all; recognition simply stays
+# paused until one is connected, with no restart needed.
+CAMERA_RETRY_SECONDS = 5
+
 # ---------------------------------------------------------------------------
 # Face matching
 # ---------------------------------------------------------------------------
