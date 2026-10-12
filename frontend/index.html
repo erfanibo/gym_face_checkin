@@ -576,26 +576,24 @@
 
       <!-- ============ اعضا: افزودن عضو ============ -->
       <div class="page" data-page="members-add" style="--acc:var(--c-members)">
-        <div class="not-connected" style="margin-bottom:22px;">
-          <div class="nc-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6"/><line x1="17" y1="8" x2="17" y2="13"/><line x1="14.5" y1="10.5" x2="19.5" y2="10.5"/>
-            </svg>
-          </div>
-          <div class="nc-title">عضو جدید از طریق چهره ثبت می‌شود</div>
-          <div class="nc-text">ثبت‌نام واقعی با گرفتن عکس از صف انتظار پذیرش انجام می‌شود تا چهره‌ی عضو برای تشخیص بعدی ذخیره شود. این فرم برای افزودن دستی (بدون نیاز به ایستادن جلوی دوربین) هنوز به بک‌اند وصل نیست.</div>
+        <p class="block-hint">
+          افزودن دستی عضو، بدون نیاز به ایستادن جلوی دوربین — برای وقتی دوربین وصل نیست، یا همین الان کنار دستگاه نیستید.
+          عضو همین الان با یک کد عضویت ساخته می‌شود؛ فقط تشخیص خودکار چهره‌اش هنوز فعال نیست. هروقت دوربین او را دید،
+          از صف پذیرش (ثبت چهره) گزینه‌ی «این چهره متعلق به کدام عضو است» را بزنید و همین عضو را از لیست انتخاب کنید
+          تا چهره‌اش هم وصل شود.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label>نام و نام خانوادگی</label><input id="manualAddFullName" type="text" placeholder="مثلاً: علی رضایی" /></div>
+          <div class="field"><label>شماره تماس (اختیاری)</label><input id="manualAddPhone" type="tel" placeholder="09xxxxxxxxx" /></div>
         </div>
-        <button class="btn-primary" onclick="goToPage('reception-queue')">برو به صف پذیرش</button>
+        <div class="error-msg" id="manualAddError"></div>
+        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
+          <button class="btn-primary" id="manualAddBtn" onclick="submitManualRegistration()">ثبت عضو</button>
+        </div>
 
         <div class="divider"></div>
-        <div class="section-title"><h2>فرم افزودن دستی (غیرفعال)</h2></div>
-        <div class="form-grid">
-          <div class="field"><label>نام و نام خانوادگی</label><input type="text" placeholder="مثلاً: علی رضایی" disabled /></div>
-          <div class="field"><label>شماره تماس</label><input type="tel" placeholder="09xxxxxxxxx" disabled /></div>
-        </div>
-        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
-          <button class="btn-primary" disabled>ثبت عضو</button>
-        </div>
+        <p class="block-hint">اگر همین الان کنار دستگاه هستید و شخص حاضر است، ثبت‌نام از طریق چهره بهتر است — چون چهره‌اش از همان ابتدا برای تشخیص بعدی ذخیره می‌شود و این مرحله‌ی اضافه لازم نیست.</p>
+        <button class="btn-secondary btn-sm" onclick="goToPage('reception-queue')">برو به صف پذیرش</button>
       </div>
 
       <!-- ============ اعضا: تمدید/پایان عضویت ============ -->
@@ -1500,6 +1498,41 @@ async function submitEdit() {
   closeEditModal();
 }
 
+/* ---- اعضا: افزودن عضو جدید به‌صورت دستی (بدون دوربین) ---- */
+async function submitManualRegistration() {
+  const errorEl = document.getElementById('manualAddError');
+  const btn = document.getElementById('manualAddBtn');
+  errorEl.textContent = '';
+
+  const full_name = document.getElementById('manualAddFullName').value.trim();
+  const phone = document.getElementById('manualAddPhone').value.trim();
+  if (full_name.length < 2) { errorEl.textContent = 'لطفاً نام کامل را وارد کنید.'; return; }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/users`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name, phone: phone || null }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ثبت عضو انجام نشد. دوباره تلاش کنید.';
+      return;
+    }
+    const result = await res.json();
+    // full reload (not a local unshift) so `members` stays the complete
+    // roster even if this page was opened directly, without visiting لیست
+    // اعضا first -- other pages (تمدید/جستجو/گزارش) trust `members.length`
+    // alone to decide whether they still need to fetch it themselves.
+    await loadMembers();
+    document.getElementById('manualAddFullName').value = '';
+    document.getElementById('manualAddPhone').value = '';
+    showToast(`عضو <b>${result.full_name}</b> ثبت شد — کد عضویت: <b>${result.membership_code}</b>. چهره‌اش هنوز ثبت نشده؛ هروقت دوربین او را دید، از صف پذیرش به او وصلش کنید.`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ---- workout plan editor (admin side) ---- */
 let activeWorkoutUserId = null;
 
@@ -1626,8 +1659,16 @@ function membershipBadge(member) {
   return '';
 }
 
+// یک عضوی که دستی (بدون دوربین) اضافه شده و هنوز هیچ چهره‌ای برایش ثبت
+// نشده -- یادآوری که تشخیص خودکار برای او هنوز فعال نیست، نه یک خطا.
+function faceBadge(member) {
+  if (member.has_face_sample) return '';
+  return '<span class="member-status status-expiring">بدون چهره ثبت‌شده</span>';
+}
+
 function memberRowHtml(m, extraActionsHtml) {
   const mBadge = membershipBadge(m);
+  const fBadge = faceBadge(m);
   return `
     <div class="member-row">
       <img src="${m.photo_url || ''}" alt="${escapeAttr(m.full_name)}" onerror="this.style.visibility='hidden'" />
@@ -1638,7 +1679,7 @@ function memberRowHtml(m, extraActionsHtml) {
           ${m.last_checkin_at ? ` · آخرین تردد: ${timeAgo(m.last_checkin_at)}` : ''}
         </div>
       </div>
-      <div class="badge-stack">${statusBadge(m)}${mBadge}</div>
+      <div class="badge-stack">${statusBadge(m)}${mBadge}${fBadge}</div>
       <div class="member-actions">${extraActionsHtml}</div>
     </div>`;
 }
@@ -2199,6 +2240,14 @@ function connectWs() {
       if (member) {
         member.last_event_type = msg.event_type;
         member.last_checkin_at = msg.checkin_at;
+        renderMembers(); renderInOutList();
+      }
+    } else if (msg.event === 'member_registered') {
+      // only patch the in-memory list if it was already loaded on this
+      // client -- otherwise leave it empty so whichever page needs it next
+      // still does its normal full fetch (see submitManualRegistration).
+      if (members.length && !members.some(m => m.id === msg.member.id)) {
+        members.unshift(msg.member);
         renderMembers(); renderInOutList();
       }
     } else if (msg.event === 'member_deleted') {

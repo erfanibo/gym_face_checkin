@@ -17,6 +17,19 @@ class RegisterPendingRequest(BaseModel):
     # by the operator.
 
 
+class ManualRegisterRequest(BaseModel):
+    """
+    Add a member directly from the admin panel, with no captured face --
+    for when the camera is disconnected/not installed yet, or the operator
+    just doesn't want to stand the person in front of it right now (see
+    routers/users.py create_user_manual). Same membership_code auto-
+    generation rule as RegisterPendingRequest above.
+    """
+
+    full_name: str = Field(..., min_length=2, description="نام و نام خانوادگی عضو")
+    phone: Optional[str] = Field(None, description="شماره تماس")
+
+
 class CameraStatus(BaseModel):
     connected: bool = Field(..., description="آیا FaceEngine همین الان دوربین را باز و در حال خواندن فریم دارد")
 
@@ -50,6 +63,10 @@ class RegisteredUserOut(BaseModel):
     last_checkin_at: Optional[str] = None
     last_event_type: Optional[str] = None  # 'in' | 'out' | None (هرگز تردد ثبت نشده)
     membership_expires_at: Optional[str] = None  # None = تاریخ پایانی هنوز برایش ثبت نشده (نه «منقضی»)
+    # False for a member added manually with no face sample yet (see
+    # ManualRegisterRequest) -- recognition stays inactive for them until an
+    # operator links a captured face via the pending-queue "assign" flow.
+    has_face_sample: bool = True
 
 
 class RenewMembershipRequest(BaseModel):

@@ -6,10 +6,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth
-from ..database import db_cursor
+from ..database import db_cursor, generate_unique_membership_code
 from ..models import (
     AttendanceEvent,
     ManualAttendanceRequest,
+    ManualRegisterRequest,
     RegisteredUserOut,
     RenewMembershipRequest,
     UpdateUserRequest,
@@ -33,7 +34,8 @@ def _add_months(dt: datetime, months: int) -> datetime:
 router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.require_manager)])
 
 _USER_WITH_ATTENDANCE_SELECT = """
-    SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type
+    SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type,
+           EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample
     FROM registered_users u
     LEFT JOIN (
         SELECT a1.user_id, a1.checkin_at, a1.event_type
@@ -58,6 +60,7 @@ def _row_to_user_out(r) -> RegisteredUserOut:
         last_checkin_at=r["last_checkin_at"],
         last_event_type=r["last_event_type"],
         membership_expires_at=r["membership_expires_at"],
+        has_face_sample=bool(r["has_face_sample"]),
     )
 
 
@@ -67,6 +70,49 @@ def list_users():
         cur.execute(_USER_WITH_ATTENDANCE_SELECT + " ORDER BY u.created_at DESC")
         rows = cur.fetchall()
     return [_row_to_user_out(r) for r in rows]
+
+
+@router.post("/users", response_model=RegisteredUserOut)
+async def create_user_manual(payload: ManualRegisterRequest, request: Request):
+    """
+    Adds a brand-new member directly from the "اعضا > افزودن عضو" page,
+    with NO captured face -- for data entry when the camera is
+    disconnected/not installed yet, or the operator simply doesn't want to
+    stand the person in front of it right now. Unlike /api/queue/{id}/register
+    (the normal camera-driven flow), there's no pending-queue row and no
+    face to dedupe against, so this never raises a "already registered"
+    conflict -- the operator is trusted here, same as manual attendance.
+
+    The member is created with encoding=NULL and zero member_face_samples
+    rows, so FaceEngine.reload_known_users() simply never sees them --
+    recognition for this member stays off until an operator later sees them
+    in the pending queue and uses "این چهره متعلق به کدام عضو است" to link a
+    captured face to this same row (routers/queue.py assign_pending_to_member).
+    That existing flow is the only thing needed to "finish" this member's
+    registration once a camera is available -- no new endpoint for it.
+    """
+    full_name = payload.full_name.strip()
+    phone = payload.phone.strip() if payload.phone else None
+    now = datetime.now(timezone.utc).isoformat()
+    membership_code = generate_unique_membership_code()
+
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO registered_users
+                   (membership_code, full_name, phone, encoding, photo_path, created_at)
+               VALUES (?, ?, ?, NULL, NULL, ?)""",
+            (membership_code, full_name, phone, now),
+        )
+        new_user_id = cur.lastrowid
+
+    with db_cursor() as cur:
+        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (new_user_id,))
+        row = cur.fetchone()
+    result = _row_to_user_out(row)
+
+    await manager.broadcast({"event": "member_registered", "member": result.model_dump()})
+
+    return result
 
 
 @router.get("/attendance", response_model=list[AttendanceEvent])

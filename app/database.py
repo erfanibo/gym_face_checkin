@@ -28,7 +28,12 @@ CREATE TABLE IF NOT EXISTS registered_users (
     membership_code        TEXT UNIQUE,   -- auto-generated random number, see generate_unique_membership_code()
     full_name               TEXT NOT NULL,
     phone                   TEXT,
-    encoding                BLOB NOT NULL,   -- 128 x float64, see face_engine.encoding_to_blob
+    -- 128 x float64, see face_engine.encoding_to_blob. NULL means this member
+    -- was added manually (see routers/users.py create_user_manual) without
+    -- ever standing in front of the camera -- recognition for them stays
+    -- inactive until an operator links a captured face later via the pending
+    -- queue's "this face belongs to an existing member" flow.
+    encoding                BLOB,
     photo_path              TEXT,
     created_at              TEXT NOT NULL DEFAULT (datetime('now')),
     -- NULL means "no expiry date has ever been set for this member" (e.g.
@@ -245,6 +250,60 @@ def _migrate_recognition_log_nullable(conn: sqlite3.Connection):
     conn.execute("DROP TABLE recognition_log_old")
 
 
+def _migrate_registered_users_encoding_nullable(conn: sqlite3.Connection):
+    """
+    registered_users.encoding used to be NOT NULL -- every member had to be
+    captured by the camera to exist at all. Now a member can be added
+    manually (no camera needed, see routers/users.py create_user_manual)
+    with encoding left NULL until an operator links a captured face to them
+    later. SQLite can't relax a NOT NULL constraint with ALTER TABLE, and
+    this table has several other tables pointing FOREIGN KEY REFERENCES at
+    it (attendance_log, member_face_samples, recognition_log, workout_items,
+    pending_queue.registered_user_id) -- so this follows SQLite's documented
+    recipe for that case: turn off FK enforcement, rebuild the table under a
+    new name with the relaxed schema, copy every row across, drop the old
+    table, and rename the new one back to "registered_users" (the other
+    tables' REFERENCES clauses are matched by name, so they transparently
+    point at the rebuilt table once the name is back). Only runs when the
+    OLD stricter definition is actually detected, so this is a no-op forever
+    after the first upgrade, and a brand-new database never hits it at all
+    (SCHEMA above already creates the column nullable).
+    """
+    cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(registered_users)")}
+    encoding_col = cols.get("encoding")
+    if encoding_col is None or encoding_col["notnull"] == 0:
+        return  # table doesn't exist yet, or was already created with the new nullable schema
+
+    # PRAGMA foreign_keys can't be changed inside an active transaction, and
+    # a CREATE TABLE just above (via executescript) may have left one open.
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("BEGIN")
+    conn.execute(
+        """CREATE TABLE registered_users_new (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            membership_code        TEXT UNIQUE,
+            full_name               TEXT NOT NULL,
+            phone                   TEXT,
+            encoding                BLOB,
+            photo_path              TEXT,
+            created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+            membership_expires_at   TEXT
+        )"""
+    )
+    conn.execute(
+        """INSERT INTO registered_users_new
+               (id, membership_code, full_name, phone, encoding, photo_path, created_at, membership_expires_at)
+           SELECT id, membership_code, full_name, phone, encoding, photo_path, created_at, membership_expires_at
+           FROM registered_users"""
+    )
+    conn.execute("DROP TABLE registered_users")
+    conn.execute("ALTER TABLE registered_users_new RENAME TO registered_users")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_phone ON registered_users(phone)")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=ON")
+
+
 def _backfill_face_samples(conn: sqlite3.Connection):
     """
     member_face_samples was introduced after members had a single encoding
@@ -252,12 +311,15 @@ def _backfill_face_samples(conn: sqlite3.Connection):
     member registered before this feature existed) gets their original
     registered_users.encoding copied in as their first sample. Idempotent —
     only touches members with zero samples, safe to run on every startup,
-    never deletes or overwrites anything.
+    never deletes or overwrites anything. Members added manually (no camera,
+    encoding IS NULL) are skipped on purpose -- member_face_samples.encoding
+    is NOT NULL, since a "sample" with no actual face vector would crash the
+    face-distance math the moment the camera thread compares against it.
     """
     rows = conn.execute(
         """SELECT u.id, u.encoding FROM registered_users u
            LEFT JOIN member_face_samples s ON s.user_id = u.id
-           WHERE s.id IS NULL"""
+           WHERE s.id IS NULL AND u.encoding IS NOT NULL"""
     ).fetchall()
     for row in rows:
         conn.execute(
@@ -308,6 +370,7 @@ def init_db():
         conn.executescript(SCHEMA)
         _migrate(conn)
         _migrate_recognition_log_nullable(conn)
+        _migrate_registered_users_encoding_nullable(conn)
         _backfill_membership_codes(conn)
         _backfill_face_samples(conn)
         conn.commit()
