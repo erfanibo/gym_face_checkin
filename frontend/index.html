@@ -838,19 +838,6 @@
         <button class="btn-primary" onclick="submitPasswordChange()">ذخیره رمز جدید</button>
       </div>
 
-      <!-- ============ تنظیمات: تنظیمات عمومی ============ -->
-      <div class="page" data-page="settings-general" style="--acc:var(--c-settings)">
-        <p class="block-hint">این مقادیر هنوز ذخیره نمی‌شوند — طراحی فرم برای وقتی که به بک‌اند وصل شود.</p>
-        <div class="form-grid">
-          <div class="field"><label>زبان پنل</label><select disabled><option>فارسی</option></select></div>
-          <div class="field"><label>منطقه‌ی زمانی</label><select disabled><option>Asia/Tehran</option></select></div>
-          <div class="field"><label>قالب تاریخ</label><select disabled><option>شمسی</option></select></div>
-        </div>
-        <div class="modal-actions" style="margin-top:18px; max-width:220px;">
-          <button class="btn-primary" disabled>ذخیره تغییرات</button>
-        </div>
-      </div>
-
       <!-- ============ تنظیمات: لاگ سیستم ============ -->
       <div class="page" data-page="settings-log" style="--acc:var(--c-settings)">
         <div class="section-title"><h2>لاگ شناسایی (سیستم)</h2></div>
@@ -1054,7 +1041,6 @@ const NAV = [
 
   { id: 'settings', label: 'تنظیمات', accent: 'settings', icon: ICONS.settings, children: [
       { id: 'settings-users', label: 'کاربران و دسترسی‌ها', page: 'settings-users', title: 'کاربران و دسترسی‌ها', subtitle: 'پیگیری و مدیریت سیستم' },
-      { id: 'settings-general', label: 'تنظیمات عمومی', page: 'settings-general', title: 'تنظیمات عمومی', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-log', label: 'لاگ سیستم', page: 'settings-log', title: 'لاگ سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-backup', label: 'پشتیبان‌گیری (بکاپ)', page: 'settings-backup', title: 'پشتیبان‌گیری (بکاپ)', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-update', label: 'به‌روزرسانی سیستم', page: 'settings-update', title: 'به‌روزرسانی سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
