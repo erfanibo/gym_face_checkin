@@ -85,18 +85,26 @@ def update_behavior_settings(body: BehaviorSettings):
 
 
 # ---------------------------------------------------------------------------
-# تنظیمات > اطلاعات باشگاه -- دومین placeholder که همین دور وصل شد.
-# برخلاف بخش بالا، این مقادیر روی هیچ منطقی (face_engine یا جای دیگه) اثر
-# ندارند -- صرفاً اطلاعات تماس/آدرس برای مرجع خودِ مدیر، همین‌جا ذخیره و
-# نمایش داده می‌شوند. عمداً جایی دیگر (عنوان صفحه، صفحه‌ی ورود، نوار کناری)
-# به این مقدار وصل نشده -- آن‌ها پیش از لاگین رندر می‌شوند و این مسیر پشت
-# require_manager است؛ اگر بعداً لازم شد، باید یک مسیر GET عمومی جدا اضافه شود.
+# تنظیمات > اطلاعات باشگاه.
+# نام باشگاه «منبع واقعیِ» برندینگ کل سیستم است (پروژه قرار است برای هر باشگاهی
+# قابل استفاده باشد، نه فقط یک باشگاه): عنوان تب مرورگر، صفحه‌ی ورود و نوار کناریِ
+# پنل مدیر، و صفحه‌ی ورود/هدر پنل عضو همه از همین مقدار می‌خوانند. چون صفحه‌های
+# ورود قبل از لاگین رندر می‌شوند و این مسیر (/api/settings/...) پشت require_manager
+# است، خودِ نام از طریق یک مسیر عمومیِ فقط-خواندنی جدا (routers/public.py ->
+# GET /api/public/club) هم در دسترس است؛ تلفن و آدرس عمداً فقط پشت لاگین می‌مانند.
 # ---------------------------------------------------------------------------
 _CLUB_NAME_KEY = "club_info_name"
 _CLUB_PHONE_KEY = "club_info_phone"
 _CLUB_ADDRESS_KEY = "club_info_address"
 
-_DEFAULT_CLUB_NAME = "باشگاه گلادیاتور"  # همونی که فعلاً هاردکد توی frontend/index.html هم هست
+# نام پیش‌فرضِ خنثی تا وقتی مدیر اولین بار نام واقعی را از «تنظیمات > اطلاعات
+# باشگاه» وارد کند. عمداً اسم هیچ باشگاه خاصی نیست.
+DEFAULT_CLUB_NAME = "باشگاه من"
+
+
+def get_club_name() -> str:
+    """نام فعلی باشگاه (یا پیش‌فرض خنثی). هم برای پنل مدیر و هم مسیر عمومی."""
+    return (get_setting(_CLUB_NAME_KEY) or "").strip() or DEFAULT_CLUB_NAME
 
 
 def _current_club_info() -> ClubInfo:
@@ -106,7 +114,7 @@ def _current_club_info() -> ClubInfo:
     phone = get_setting(_CLUB_PHONE_KEY) or None
     address = get_setting(_CLUB_ADDRESS_KEY) or None
     return ClubInfo(
-        club_name=get_setting(_CLUB_NAME_KEY) or _DEFAULT_CLUB_NAME,
+        club_name=get_club_name(),
         phone=phone,
         address=address,
     )

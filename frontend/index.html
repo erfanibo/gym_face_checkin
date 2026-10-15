@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>باشگاه گلادیاتور | پنل مدیریت</title>
+<title>پنل مدیریت</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -389,7 +389,7 @@
         <line x1="4.5" y1="9" x2="4.5" y2="15"/><line x1="19.5" y1="9" x2="19.5" y2="15"/>
       </svg>
     </div>
-    <h1>باشگاه گلادیاتور <span>ورود به پنل مدیریت</span></h1>
+    <h1><em id="loginClubName" style="font-style:normal"></em><span>ورود به پنل مدیریت</span></h1>
     <div class="field">
       <label>رمز عبور مدیر</label>
       <input id="loginPassword" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter') submitLogin()" />
@@ -411,7 +411,7 @@
         </svg>
       </div>
       <div>
-        <div class="name">باشگاه گلادیاتور</div>
+        <div class="name" id="sidebarClubName"></div>
         <div class="sub">پنل مدیریت</div>
       </div>
     </div>
@@ -870,9 +870,9 @@
 
       <!-- ============ تنظیمات: اطلاعات باشگاه ============ -->
       <div class="page" data-page="settings-info" style="--acc:var(--c-settings)">
-        <p class="block-hint">این اطلاعات فقط برای مرجع خودِ شماست؛ هنوز جای دیگری از پنل (مثلاً عنوان صفحه یا صفحه‌ی ورود) از اینجا خوانده نمی‌شود.</p>
+        <p class="block-hint">نام باشگاه همه‌جا نمایش داده می‌شود: عنوان تب مرورگر، صفحه‌ی ورود و نوار کناری این پنل، و صفحه‌ی ورود و هدر پنل اعضا. شماره تماس و آدرس فقط برای مرجع خودِ شماست و فقط داخل همین پنل دیده می‌شود.</p>
         <div class="form-grid">
-          <div class="field"><label>نام باشگاه</label><input id="clubInfoName" type="text" /></div>
+          <div class="field"><label>نام باشگاه</label><input id="clubInfoName" type="text" maxlength="80" /></div>
           <div class="field"><label>شماره تماس</label><input id="clubInfoPhone" type="tel" placeholder="021xxxxxxx" /></div>
           <div class="field"><label>آدرس</label><input id="clubInfoAddress" type="text" placeholder="آدرس باشگاه" /></div>
         </div>
@@ -1216,6 +1216,26 @@ window.fetch = async function (...args) {
   }
   return res;
 };
+
+/* ---- نام باشگاه (برندینگ) ----
+   تنها منبعش «تنظیمات > اطلاعات باشگاه» است؛ قبل از لاگین هم از مسیر عمومی
+   /api/public/club خوانده می‌شود. هیچ‌جای دیگر نام باشگاه هاردکد نیست. */
+const FALLBACK_CLUB_NAME = 'باشگاه من';
+
+function applyClubName(name) {
+  const clean = (name || '').trim() || FALLBACK_CLUB_NAME;
+  document.title = `${clean} | پنل مدیریت`;
+  document.getElementById('loginClubName').textContent = clean;   // textContent، نه innerHTML: نام را کاربر وارد کرده
+  document.getElementById('sidebarClubName').textContent = clean;
+}
+
+async function loadPublicClubName() {
+  try {
+    const res = await fetch(`${API_BASE}/api/public/club`);
+    if (res.ok) { applyClubName((await res.json()).club_name); return; }
+  } catch { /* سرور لحظه‌ای در دسترس نیست -- پایین‌تر fallback */ }
+  applyClubName(null);
+}
 
 async function checkAuth() {
   const res = await fetch(`${API_BASE}/api/auth/me`);
@@ -1878,6 +1898,12 @@ async function saveClubInfo() {
     errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ذخیره‌ی اطلاعات باشگاه انجام نشد.';
     return;
   }
+  // نام ذخیره‌شده (trim‌شده توسط سرور) را همان لحظه روی عنوان تب و سایدبار اعمال کن.
+  const saved = await res.json().catch(() => null);
+  if (saved && saved.club_name) {
+    applyClubName(saved.club_name);
+    document.getElementById('clubInfoName').value = saved.club_name;
+  }
   showToast('اطلاعات باشگاه ذخیره شد.');
 }
 
@@ -2257,6 +2283,7 @@ function connectWs() {
   };
 }
 
+loadPublicClubName();
 checkAuth();
 </script>
 

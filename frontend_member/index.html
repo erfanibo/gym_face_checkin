@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>برنامه‌ی تمرینی من | باشگاه</title>
+<title>برنامه‌ی تمرینی من</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -53,6 +53,8 @@
   /* plan view */
   .app-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; gap: 10px; }
   .app-header h1 { font-size: 18px; margin: 0; }
+  .club-name { color: var(--muted); font-size: 12px; margin-bottom: 4px; text-align: center; }
+  .app-header .club-name { text-align: start; }
   .app-header .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .logout-btn {
     background: transparent; border: 1px solid var(--line); color: var(--muted);
@@ -84,6 +86,7 @@
 <div class="screen" id="loginScreen">
   <div class="login-wrap">
     <div class="login-card">
+      <div class="club-name" id="loginClubName"></div>
       <h1>برنامه‌ی تمرینی من <span>ورود با شماره تماس و کد عضویت</span></h1>
       <div class="field">
         <label>شماره تماس</label>
@@ -103,6 +106,7 @@
 <div class="screen" id="appScreen" style="display:none">
   <div class="app-header">
     <div>
+      <div class="club-name" id="appClubName"></div>
       <h1>برنامه‌ی تمرینی من</h1>
       <div class="sub" id="updatedNote"></div>
     </div>
@@ -127,6 +131,21 @@ function timeAgo(iso) {
   if (hours < 24) return `${hours} ساعت پیش`;
   const days = Math.floor(hours / 24);
   return `${days} روز پیش`;
+}
+
+/* نام باشگاه از «تنظیمات > اطلاعات باشگاه» پنل مدیر می‌آید (مسیر عمومی، قبل از لاگین هم کار می‌کند). */
+function applyClubName(name) {
+  const clean = (name || '').trim();
+  document.title = clean ? `برنامه‌ی تمرینی من | ${clean}` : 'برنامه‌ی تمرینی من';
+  document.getElementById('loginClubName').textContent = clean;   // textContent: نام را کاربر وارد کرده
+  document.getElementById('appClubName').textContent = clean;
+}
+
+async function loadPublicClubName() {
+  try {
+    const res = await fetch(`${API_BASE}/api/public/club`);
+    if (res.ok) applyClubName((await res.json()).club_name);
+  } catch { /* سرور لحظه‌ای در دسترس نیست -- نام نمایش داده نمی‌شود، بقیه‌ی صفحه عادی کار می‌کند */ }
 }
 
 async function checkAuth() {
@@ -222,6 +241,7 @@ async function toggleItem(itemId) {
   await loadPlan();
 }
 
+loadPublicClubName();
 checkAuth();
 </script>
 </body>

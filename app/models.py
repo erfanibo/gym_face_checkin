@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PendingItem(BaseModel):
@@ -170,6 +170,17 @@ class BehaviorSettings(BaseModel):
 # تنظیمات > اطلاعات باشگاه (routers/settings.py)
 # ---------------------------------------------------------------------------
 class ClubInfo(BaseModel):
-    club_name: str = Field(..., min_length=2, description="نام باشگاه")
+    # strip قبل از اعتبارسنجی: «  ا  » (فقط فاصله) نباید به‌عنوان نام معتبر ذخیره شود.
+    club_name: str = Field(..., min_length=2, max_length=80, description="نام باشگاه")
     phone: Optional[str] = Field(None, description="شماره تماس باشگاه")
     address: Optional[str] = Field(None, description="آدرس باشگاه")
+
+    @field_validator("club_name", mode="before")
+    @classmethod
+    def _strip_club_name(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
+class ClubPublic(BaseModel):
+    """فقط چیزی که قبل از لاگین هم نمایش داده می‌شود (GET /api/public/club)."""
+    club_name: str
