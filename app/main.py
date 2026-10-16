@@ -10,7 +10,7 @@ from . import auth, config
 from .database import init_db
 from .face_engine import FaceEngine
 from .routers import auth as auth_router
-from .routers import backup, logs, public, queue, settings, system, users, workouts
+from .routers import backup, logs, plans, public, queue, settings, system, users, workouts
 from .version import __version__
 from .ws_manager import manager
 
@@ -56,6 +56,7 @@ app.include_router(auth_router.router)
 app.include_router(public.router)
 app.include_router(queue.router)
 app.include_router(users.router)
+app.include_router(plans.router)
 app.include_router(logs.router)
 app.include_router(backup.router)
 app.include_router(workouts.router)

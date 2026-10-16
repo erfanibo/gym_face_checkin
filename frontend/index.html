@@ -593,6 +593,7 @@
         <div class="form-grid">
           <div class="field"><label>نام و نام خانوادگی</label><input id="manualAddFullName" type="text" placeholder="مثلاً: علی رضایی" /></div>
           <div class="field"><label>شماره تماس (اختیاری)</label><input id="manualAddPhone" type="tel" placeholder="09xxxxxxxxx" /></div>
+          <div class="field"><label>تعرفه‌ی عضویت (اختیاری)</label><select id="manualAddPlan"></select></div>
         </div>
         <div class="error-msg" id="manualAddError"></div>
         <div class="modal-actions" style="margin-top:18px; max-width:220px;">
@@ -625,6 +626,18 @@
             <button class="btn-sm btn-secondary" onclick="renewMembership(3)">۳ ماهه</button>
             <button class="btn-sm btn-secondary" onclick="renewMembership(6)">۶ ماهه</button>
             <button class="btn-sm btn-secondary" onclick="renewMembership(12)">۱۲ ماهه</button>
+          </div>
+
+          <div class="section-title" style="margin-top:20px;"><h2>ثبت تعرفه برای این عضو</h2></div>
+          <p class="nc-text" style="margin-bottom:10px;">تعداد روزِ تعرفه به تاریخ پایان فعلی اضافه می‌شود (اگر هنوز اعتبار دارد از همان تاریخ، وگرنه از امروز).</p>
+          <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; max-width:520px;">
+            <div class="field" style="flex:1; min-width:220px;"><select id="renewPlanSelect" onchange="updateRenewPlanPreview()"></select></div>
+            <button class="btn-primary" id="renewPlanBtn" onclick="assignPlanToSelectedMember()">ثبت تعرفه</button>
+          </div>
+          <div class="member-meta" id="renewPlanPreview" style="margin-top:8px;"></div>
+          <div id="renewPlanEmpty" style="display:none; margin-top:8px;">
+            <span class="member-meta">هنوز تعرفه‌ای تعریف نشده.</span>
+            <button class="btn-sm btn-secondary" onclick="goToPage('finance-plans')">تعریف تعرفه</button>
           </div>
 
           <div class="section-title" style="margin-top:20px;"><h2>پایان عضویت</h2></div>
@@ -700,14 +713,16 @@
       <div class="page" data-page="finance-plans" style="--acc:var(--c-finance)">
         <div class="section-title">
           <h2>پلن‌های عضویت</h2>
-          <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>افزودن پلن جدید</button>
+          <button class="btn-primary btn-sm" style="margin-right:auto;" onclick="openPlanModal()">+ افزودن تعرفه‌ی جدید</button>
         </div>
+        <p class="block-hint">هر تعرفه یک‌بار اینجا تعریف می‌شود (نام، قیمت، تعداد روز). بعد هنگام ثبت‌نام یا تمدید هر عضو می‌توانید یکی از این تعرفه‌ها را برایش ثبت کنید؛ تعداد روز تعرفه به تاریخ پایان عضویتش اضافه می‌شود.</p>
         <div class="data-table-wrap">
           <table class="data-table">
-            <thead><tr><th>نام پلن</th><th>مدت</th><th>قیمت</th><th>تعداد عضو فعال</th></tr></thead>
-            <tbody><tr class="table-empty-row"><td colspan="4">هنوز پلنی تعریف نشده — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+            <thead><tr><th>نام پلن</th><th>مدت</th><th>قیمت</th><th>تعداد عضو فعال</th><th></th></tr></thead>
+            <tbody id="plansTableBody"><tr class="table-empty-row"><td colspan="5">در حال بارگذاری…</td></tr></tbody>
           </table>
         </div>
+        <div class="error-msg" id="plansError" style="margin-top:10px;"></div>
       </div>
 
       <!-- ============ مالی و شهریه: پرداخت‌ها ============ -->
@@ -911,10 +926,38 @@
       <label>شماره تماس</label>
       <input id="phone" type="tel" placeholder="09xxxxxxxxx" />
     </div>
+    <div class="field">
+      <label>تعرفه‌ی عضویت (اختیاری)</label>
+      <select id="registerPlan"></select>
+    </div>
     <div class="error-msg" id="modalError"></div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal()">انصراف</button>
       <button class="btn-primary" onclick="submitRegistration()">ذخیره و ثبت‌نام</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="planOverlay">
+  <div class="modal" style="max-width:420px;">
+    <h3>افزودن تعرفه‌ی جدید</h3>
+    <div class="field">
+      <label>نام تعرفه</label>
+      <input id="planName" type="text" maxlength="60" placeholder="مثلاً: ماهانه" />
+    </div>
+    <div class="field">
+      <label>قیمت (تومان)</label>
+      <input id="planPrice" type="text" inputmode="numeric" placeholder="مثلاً: 1200000" oninput="updatePlanPricePreview()" />
+      <div class="member-meta" id="planPricePreview" style="min-height:16px;"></div>
+    </div>
+    <div class="field">
+      <label>تعداد روز</label>
+      <input id="planDays" type="text" inputmode="numeric" placeholder="مثلاً: 30" />
+    </div>
+    <div class="error-msg" id="planModalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closePlanModal()">انصراف</button>
+      <button class="btn-primary" id="planSaveBtn" onclick="submitPlan()">ذخیره‌ی تعرفه</button>
     </div>
   </div>
 </div>
@@ -1071,7 +1114,9 @@ const PAGE_LOADERS = {
   'settings-info': loadClubInfo,
   'settings-update': loadSystemVersion,
   'members-list': loadMembers,
-  'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
+  'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); await refreshPlanSelects(); },
+  'members-add': refreshPlanSelects,
+  'finance-plans': loadPlans,
   'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
   'members-report': async () => { await ensureMembersLoaded(); renderMemberReport(); },
   'coach-workout': async () => { await ensureMembersLoaded(); renderCoachWorkoutList(); },
@@ -1531,7 +1576,7 @@ async function submitManualRegistration() {
   try {
     const res = await fetch(`${API_BASE}/api/users`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ full_name, phone: phone || null }),
+      body: JSON.stringify({ full_name, phone: phone || null, plan_id: selectedPlanId('manualAddPlan') }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1546,7 +1591,8 @@ async function submitManualRegistration() {
     await loadMembers();
     document.getElementById('manualAddFullName').value = '';
     document.getElementById('manualAddPhone').value = '';
-    showToast(`عضو <b>${result.full_name}</b> ثبت شد — کد عضویت: <b>${result.membership_code}</b>. چهره‌اش هنوز ثبت نشده؛ هروقت دوربین او را دید، از صف پذیرش به او وصلش کنید.`);
+    document.getElementById('manualAddPlan').value = '';
+    showToast(`عضو <b>${escapeText(result.full_name)}</b> ثبت شد — کد عضویت: <b>${result.membership_code}</b>. چهره‌اش هنوز ثبت نشده؛ هروقت دوربین او را دید، از صف پذیرش به او وصلش کنید.`);
   } finally {
     btn.disabled = false;
   }
@@ -1782,12 +1828,17 @@ function renderRenewPanel() {
   const expiryLine = member.membership_expires_at
     ? `تاریخ پایان فعلی: ${formatDateFa(member.membership_expires_at)}`
     : 'تا الان برای این عضو تاریخ پایانی ثبت نشده.';
-  document.getElementById('renewPanelExpiry').innerHTML = badge ? `${expiryLine} &nbsp; ${badge}` : expiryLine;
+  const planLine = member.last_plan_name ? ` — آخرین تعرفه: ${escapeText(member.last_plan_name)}` : '';
+  document.getElementById('renewPanelExpiry').innerHTML = (badge ? `${expiryLine}${planLine} &nbsp; ${badge}` : `${expiryLine}${planLine}`);
+  updateRenewPlanPreview();
 }
 
 function applyMembershipUpdate(updated) {
   const member = members.find(m => m.id === updated.id);
-  if (member) member.membership_expires_at = updated.membership_expires_at;
+  if (member) {
+    member.membership_expires_at = updated.membership_expires_at;
+    if ('last_plan_name' in updated) member.last_plan_name = updated.last_plan_name;
+  }
   renderMembers();
   renderInOutList();
   renderRenewPanel();
@@ -1974,6 +2025,200 @@ async function checkForUpdate() {
   }
 }
 
+/* ============================================================ */
+/* مالی و شهریه: تعرفه‌ها و پلن‌ها                                  */
+/* ============================================================ */
+let plans = [];
+
+function escapeText(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ارقام فارسی/عربی -> انگلیسی، و حذف فاصله/جداکننده‌ی هزارگان؛ فقط عدد صحیح (بدون اعشار/علامت) پذیرفته می‌شود.
+function parseWholeNumber(str) {
+  const clean = String(str)
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\s,٬،]/g, '');
+  return /^\d+$/.test(clean) ? Number(clean) : NaN;
+}
+
+const formatToman = n => `${Number(n).toLocaleString('fa-IR')} تومان`;
+const formatDays = n => `${Number(n).toLocaleString('fa-IR')} روز`;
+
+async function loadPlansQuiet() {
+  try {
+    const res = await fetch(`${API_BASE}/api/plans`);
+    if (!res.ok) return false;
+    plans = await res.json();
+    return true;
+  } catch { return false; }
+}
+
+async function loadPlans() {
+  const errorEl = document.getElementById('plansError');
+  errorEl.textContent = '';
+  const ok = await loadPlansQuiet();
+  if (!ok) errorEl.textContent = 'بارگذاری تعرفه‌ها انجام نشد.';
+  renderPlans();
+}
+
+function renderPlans() {
+  const body = document.getElementById('plansTableBody');
+  body.replaceChildren();
+  if (!plans.length) {
+    const tr = makeEl('tr', { className: 'table-empty-row' }, makeEl('td', { colSpan: 5, textContent: 'هنوز تعرفه‌ای تعریف نشده — با دکمه‌ی «افزودن تعرفه‌ی جدید» اولین تعرفه را بسازید.' }));
+    body.append(tr);
+    return;
+  }
+  for (const p of plans) {
+    const del = makeEl('button', { className: 'btn-sm btn-ghost', type: 'button', textContent: 'حذف' });
+    del.addEventListener('click', () => deletePlan(p.id));
+    body.append(makeEl('tr', {},
+      makeEl('td', { textContent: p.name }),          // textContent: نام را مدیر وارد کرده
+      makeEl('td', { textContent: formatDays(p.duration_days) }),
+      makeEl('td', { textContent: formatToman(p.price) }),
+      makeEl('td', { textContent: Number(p.active_members).toLocaleString('fa-IR') }),
+      makeEl('td', {}, del),
+    ));
+  }
+}
+
+function openPlanModal() {
+  for (const id of ['planName', 'planPrice', 'planDays']) document.getElementById(id).value = '';
+  document.getElementById('planPricePreview').textContent = '';
+  document.getElementById('planModalError').textContent = '';
+  document.getElementById('planOverlay').classList.add('open');
+  document.getElementById('planName').focus();
+}
+
+function closePlanModal() {
+  document.getElementById('planOverlay').classList.remove('open');
+}
+
+function updatePlanPricePreview() {
+  const n = parseWholeNumber(document.getElementById('planPrice').value);
+  document.getElementById('planPricePreview').textContent = Number.isFinite(n) ? formatToman(n) : '';
+}
+
+async function submitPlan() {
+  const errorEl = document.getElementById('planModalError');
+  errorEl.textContent = '';
+  const name = document.getElementById('planName').value.trim();
+  const price = parseWholeNumber(document.getElementById('planPrice').value);
+  const duration_days = parseWholeNumber(document.getElementById('planDays').value);
+
+  if (name.length < 2) { errorEl.textContent = 'نام تعرفه را وارد کنید (حداقل ۲ حرف).'; return; }
+  if (!Number.isFinite(price)) { errorEl.textContent = 'قیمت را فقط با عدد وارد کنید (۰ برای رایگان).'; return; }
+  if (price > 100000000000) { errorEl.textContent = 'قیمت بیش از حد بزرگ است.'; return; }
+  if (!Number.isFinite(duration_days) || duration_days < 1 || duration_days > 3650) {
+    errorEl.textContent = 'تعداد روز باید عددی بین ۱ تا ۳۶۵۰ باشد.'; return;
+  }
+
+  const btn = document.getElementById('planSaveBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/plans`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, price, duration_days }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ذخیره‌ی تعرفه انجام نشد. ورودی‌ها را بررسی کنید.';
+      return;
+    }
+    const created = await res.json();
+    closePlanModal();
+    await loadPlans();
+    showToast(`تعرفه‌ی <b>${escapeText(created.name)}</b> ساخته شد — ${formatToman(created.price)} برای ${formatDays(created.duration_days)}.`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deletePlan(id) {
+  const plan = plans.find(p => p.id === id);
+  if (!confirm(`تعرفه‌ی «${plan ? plan.name : ''}» حذف شود؟ عضوهایی که قبلاً این تعرفه را گرفته‌اند تغییری نمی‌کنند؛ فقط دیگر برای ثبت جدید قابل انتخاب نیست.`)) return;
+  const res = await fetch(`${API_BASE}/api/plans/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert((err.detail && typeof err.detail === 'string') ? err.detail : 'حذف تعرفه انجام نشد.');
+  }
+  await loadPlans();
+}
+
+/* ---- انتخاب تعرفه هنگام ثبت عضو (ثبت‌نام دوربین / افزودن دستی / تمدید) ---- */
+function fillPlanSelect(sel, placeholder) {
+  const prev = sel.value;
+  sel.replaceChildren(makeEl('option', { value: '', textContent: placeholder }));
+  for (const p of plans) {
+    sel.append(makeEl('option', { value: String(p.id), textContent: `${p.name} — ${formatDays(p.duration_days)} — ${formatToman(p.price)}` }));
+  }
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;  // انتخاب قبلی کاربر حفظ شود
+}
+
+async function refreshPlanSelects() {
+  await loadPlansQuiet();
+  for (const id of ['manualAddPlan', 'registerPlan']) {
+    const sel = document.getElementById(id);
+    if (sel) fillPlanSelect(sel, '— بدون تعرفه —');
+  }
+  const renewSel = document.getElementById('renewPlanSelect');
+  if (renewSel) {
+    fillPlanSelect(renewSel, '— انتخاب تعرفه —');
+    document.getElementById('renewPlanEmpty').style.display = plans.length ? 'none' : 'block';
+    renewSel.parentElement.style.display = plans.length ? '' : 'none';
+    document.getElementById('renewPlanBtn').style.display = plans.length ? '' : 'none';
+    updateRenewPlanPreview();
+  }
+}
+
+function selectedPlanId(selectId) {
+  const v = parseInt(document.getElementById(selectId).value, 10);
+  return Number.isInteger(v) ? v : null;
+}
+
+// پیش‌نمایشِ تاریخ پایانِ جدید (همان قاعده‌ی سرور: از تاریخ پایانِ فعلی اگر هنوز نگذشته، وگرنه از الان)
+function updateRenewPlanPreview() {
+  const box = document.getElementById('renewPlanPreview');
+  const btn = document.getElementById('renewPlanBtn');
+  const planId = selectedPlanId('renewPlanSelect');
+  const memberId = parseInt(document.getElementById('renewMemberSelect').value, 10);
+  const plan = plans.find(p => p.id === planId);
+  const member = members.find(m => m.id === memberId);
+  btn.disabled = !(plan && member);
+  if (!plan || !member) { box.textContent = ''; return; }
+  const now = Date.now();
+  const cur = member.membership_expires_at ? new Date(member.membership_expires_at).getTime() : NaN;
+  const base = Number.isFinite(cur) && cur > now ? cur : now;
+  const next = new Date(base + plan.duration_days * 86400000).toISOString();
+  box.textContent = `تاریخ پایان جدید: ${formatDateFa(next)}`;
+}
+
+async function assignPlanToSelectedMember() {
+  const memberId = parseInt(document.getElementById('renewMemberSelect').value, 10);
+  const planId = selectedPlanId('renewPlanSelect');
+  if (!memberId || !planId) return;
+  const btn = document.getElementById('renewPlanBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/users/${memberId}/membership/plan`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan_id: planId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert((err.detail && typeof err.detail === 'string') ? err.detail : 'ثبت تعرفه انجام نشد.');
+      await refreshPlanSelects();
+      return;
+    }
+    const updated = await res.json();
+    applyMembershipUpdate(updated);
+    showToast(`تعرفه‌ی <b>${escapeText(updated.last_plan_name || '')}</b> برای <b>${escapeText(updated.full_name)}</b> ثبت شد — عضویت تا ${formatDateFa(updated.membership_expires_at)}.`);
+  } finally {
+    updateRenewPlanPreview();
+  }
+}
+
 /* ---- تنظیمات: اطلاعات باشگاه (واقعی) ---- */
 async function loadClubInfo() {
   const btn = document.getElementById('clubInfoSaveBtn');
@@ -2151,6 +2396,7 @@ function openModal(id) {
   document.getElementById('phone').value = '';
   document.getElementById('modalError').textContent = '';
   document.getElementById('overlay').classList.add('open');
+  refreshPlanSelects();  // لیست تعرفه‌ها را برای انتخاب اختیاری تازه می‌کند
 }
 
 function closeModal() {
@@ -2167,7 +2413,7 @@ async function submitRegistration() {
 
   const res = await fetch(`${API_BASE}/api/queue/${activePendingId}/register`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ full_name, phone: phone || null }),
+    body: JSON.stringify({ full_name, phone: phone || null, plan_id: selectedPlanId('registerPlan') }),
   });
 
   if (!res.ok) {
@@ -2180,7 +2426,8 @@ async function submitRegistration() {
   pendingItems.delete(activePendingId);
   renderQueue();
   closeModal();
-  showToast(`ثبت‌نام <b>${result.full_name}</b> با موفقیت انجام شد — کد عضویت: <b>${result.membership_code}</b>`);
+  showToast(`ثبت‌نام <b>${escapeText(result.full_name)}</b> با موفقیت انجام شد — کد عضویت: <b>${result.membership_code}</b>` +
+    (result.last_plan_name ? ` — تعرفه: <b>${escapeText(result.last_plan_name)}</b>` : ''));
 }
 
 async function rejectPending(id) {
@@ -2386,7 +2633,9 @@ function connectWs() {
       const member = members.find(m => m.id === msg.id);
       if (member) { member.full_name = msg.full_name; member.phone = msg.phone; renderMembers(); renderInOutList(); }
     } else if (msg.event === 'membership_updated') {
-      applyMembershipUpdate({ id: msg.id, membership_expires_at: msg.membership_expires_at });
+      applyMembershipUpdate(msg.last_plan_name !== undefined
+        ? { id: msg.id, membership_expires_at: msg.membership_expires_at, last_plan_name: msg.last_plan_name }
+        : { id: msg.id, membership_expires_at: msg.membership_expires_at });
     } else if (msg.event === 'recognition_seen') {
       addRecognitionLogEntry({ user_id: msg.user_id, full_name: msg.full_name, created_at: msg.created_at });
     } else if (msg.event === 'camera_status') {

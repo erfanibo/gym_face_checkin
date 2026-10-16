@@ -12,6 +12,7 @@ class PendingItem(BaseModel):
 class RegisterPendingRequest(BaseModel):
     full_name: str = Field(..., min_length=2, description="نام و نام خانوادگی مشتری")
     phone: Optional[str] = Field(None, description="شماره تماس")
+    plan_id: Optional[int] = Field(None, description="پلن عضویت (اختیاری) که همان لحظه برای عضو ثبت می‌شود")
     # membership_code is intentionally NOT here — it's generated automatically
     # by the server at registration time (see routers/queue.py), never typed
     # by the operator.
@@ -28,6 +29,7 @@ class ManualRegisterRequest(BaseModel):
 
     full_name: str = Field(..., min_length=2, description="نام و نام خانوادگی عضو")
     phone: Optional[str] = Field(None, description="شماره تماس")
+    plan_id: Optional[int] = Field(None, description="پلن عضویت (اختیاری) که همان لحظه برای عضو ثبت می‌شود")
 
 
 class CameraStatus(BaseModel):
@@ -67,6 +69,9 @@ class RegisteredUserOut(BaseModel):
     # ManualRegisterRequest) -- recognition stays inactive for them until an
     # operator links a captured face via the pending-queue "assign" flow.
     has_face_sample: bool = True
+    # نام آخرین پلنی که برای این عضو ثبت شده (None = هرگز پلنی ثبت نشده، مثلاً فقط با «۱ ماهه»
+    # تمدید شده). فقط یک نشانه‌ی اطلاعاتی است، نه وضعیت قطعی عضویت فعلی.
+    last_plan_name: Optional[str] = None
 
 
 class RenewMembershipRequest(BaseModel):
@@ -207,3 +212,31 @@ class UpdateCheckResult(BaseModel):
     release_notes: Optional[str] = None
     release_url: Optional[str] = None
     published_at: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# مالی و شهریه > تعرفه‌ها و پلن‌ها (routers/plans.py)
+# ---------------------------------------------------------------------------
+class PlanCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=60, description="نام تعرفه، مثلاً «ماهانه»")
+    # strict=True: فقط عدد صحیح JSON؛ نه رشته‌ی "100" و نه true/1.5
+    price: int = Field(..., ge=0, le=100_000_000_000, strict=True, description="قیمت به تومان")
+    duration_days: int = Field(..., ge=1, le=3650, strict=True, description="مدت اعتبار به روز")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
+class PlanOut(BaseModel):
+    id: int
+    name: str
+    price: int
+    duration_days: int
+    active_members: int = Field(0, description="تعداد اعضایی که آخرین پلنشان همین است و عضویتشان هنوز منقضی نشده")
+    created_at: str
+
+
+class AssignPlanRequest(BaseModel):
+    plan_id: int

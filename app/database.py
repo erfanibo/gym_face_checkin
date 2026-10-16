@@ -114,6 +114,36 @@ CREATE TABLE IF NOT EXISTS workout_items (
     updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Membership plans ("تعرفه‌ها"): what the manager sells, e.g. "ماهانه / 1,200,000
+-- تومان / 30 روز". Never hard-deleted -- "deleting" a plan sets is_active=0 so
+-- old purchases (below) keep a valid FOREIGN KEY and the plan simply stops being
+-- offered. price is in Toman as a whole number (no decimals, no currency conversion).
+CREATE TABLE IF NOT EXISTS membership_plans (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    price          INTEGER NOT NULL CHECK (price >= 0),
+    duration_days  INTEGER NOT NULL CHECK (duration_days >= 1),
+    is_active      INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row each time a plan is registered for a member (see membership.py
+-- apply_plan). plan_name/price/duration_days are SNAPSHOTS taken at that moment,
+-- so history stays correct even if the plan is archived later, and so a future
+-- payments/debts/finance-report feature can build on real records instead of
+-- guessing. starts_at/expires_at are the period this purchase covered.
+CREATE TABLE IF NOT EXISTS membership_purchases (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES registered_users(id),
+    plan_id        INTEGER REFERENCES membership_plans(id),
+    plan_name      TEXT NOT NULL,
+    price          INTEGER NOT NULL,
+    duration_days  INTEGER NOT NULL,
+    starts_at      TEXT NOT NULL,
+    expires_at     TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
 -- Small generic key/value store for things that aren't "a member" or "an
 -- attendance event" -- right now just the manager's password hash (see
 -- auth.py). Kept as its own table instead of a bunch of one-off tables so
@@ -129,6 +159,8 @@ CREATE INDEX IF NOT EXISTS idx_face_samples_user    ON member_face_samples(user_
 CREATE INDEX IF NOT EXISTS idx_recognition_log_id   ON recognition_log(id DESC);
 CREATE INDEX IF NOT EXISTS idx_users_phone          ON registered_users(phone);
 CREATE INDEX IF NOT EXISTS idx_workout_items_user   ON workout_items(user_id, position);
+CREATE INDEX IF NOT EXISTS idx_purchases_user       ON membership_purchases(user_id, id);
+CREATE INDEX IF NOT EXISTS idx_plans_active         ON membership_plans(is_active);
 """
 
 

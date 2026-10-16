@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth, config
 from ..database import db_cursor, generate_unique_membership_code
+from ..membership import apply_plan, get_active_plan
 from ..face_engine import add_face_sample, blob_to_encoding
 from ..models import (
     AssignPendingRequest,
@@ -98,6 +99,14 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
     if pending_row is None:
         raise HTTPException(404, "این مورد در صف انتظار پیدا نشد یا قبلاً پردازش شده است")
 
+    new_expiry_iso = None
+    plan = None
+    if payload.plan_id is not None:
+        with db_cursor() as cur:
+            plan = get_active_plan(cur, payload.plan_id)
+        if plan is None:
+            raise HTTPException(400, "تعرفه‌ی انتخاب‌شده پیدا نشد یا حذف شده است.")
+
     pending_encoding = blob_to_encoding(pending_row["encoding"])
     duplicate = _find_duplicate_registered_face(pending_encoding)
     if duplicate is not None:
@@ -135,6 +144,8 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
                 "UPDATE pending_queue SET status='registered', registered_user_id=? WHERE id=?",
                 (new_user_id, pending_id),
             )
+            if plan is not None:
+                new_expiry_iso = apply_plan(cur, new_user_id, plan)  # همان تراکنش ثبت‌نام
     except Exception as exc:
         # most likely a UNIQUE constraint violation on membership_code
         raise HTTPException(400, f"ثبت‌نام ناموفق بود: {exc}")
@@ -150,14 +161,19 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
 
     await manager.broadcast({"event": "pending_resolved", "id": pending_id})
 
-    return RegisteredUserOut(
+    result = RegisteredUserOut(
         id=new_user_id,
         membership_code=membership_code,
         full_name=payload.full_name,
         phone=payload.phone,
         photo_url=f"/static/pending_faces/{Path(pending_row['photo_path']).name}",
         created_at=now,
+        membership_expires_at=new_expiry_iso if plan is not None else None,
+        last_plan_name=plan["name"] if plan is not None else None,
     )
+    # همان رویدادی که ثبت دستی هم می‌فرستد: لیست اعضا (و تاریخ پایانِ پلن) در پنل بدون رفرش به‌روز شود
+    await manager.broadcast({"event": "member_registered", "member": result.model_dump()})
+    return result
 
 
 @router.post("/{pending_id}/assign", response_model=AssignPendingResponse)

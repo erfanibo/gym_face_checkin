@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth
 from ..database import db_cursor, generate_unique_membership_code
+from ..membership import apply_plan, get_active_plan
 from ..models import (
+    AssignPlanRequest,
     AttendanceEvent,
     ManualAttendanceRequest,
     ManualRegisterRequest,
@@ -35,7 +37,8 @@ router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.req
 
 _USER_WITH_ATTENDANCE_SELECT = """
     SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type,
-           EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample
+           EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample,
+           (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id ORDER BY pu.id DESC LIMIT 1) AS last_plan_name
     FROM registered_users u
     LEFT JOIN (
         SELECT a1.user_id, a1.checkin_at, a1.event_type
@@ -61,6 +64,7 @@ def _row_to_user_out(r) -> RegisteredUserOut:
         last_event_type=r["last_event_type"],
         membership_expires_at=r["membership_expires_at"],
         has_face_sample=bool(r["has_face_sample"]),
+        last_plan_name=r["last_plan_name"],
     )
 
 
@@ -96,6 +100,14 @@ async def create_user_manual(payload: ManualRegisterRequest, request: Request):
     now = datetime.now(timezone.utc).isoformat()
     membership_code = generate_unique_membership_code()
 
+    # اگر پلن خواسته شده، قبل از ساختن عضو چک می‌شود تا یک پلن نامعتبر عضو نیمه‌کاره نسازد.
+    plan = None
+    if payload.plan_id is not None:
+        with db_cursor() as cur:
+            plan = get_active_plan(cur, payload.plan_id)
+        if plan is None:
+            raise HTTPException(400, "تعرفه‌ی انتخاب‌شده پیدا نشد یا حذف شده است.")
+
     with db_cursor(commit=True) as cur:
         cur.execute(
             """INSERT INTO registered_users
@@ -104,6 +116,8 @@ async def create_user_manual(payload: ManualRegisterRequest, request: Request):
             (membership_code, full_name, phone, now),
         )
         new_user_id = cur.lastrowid
+        if plan is not None:
+            apply_plan(cur, new_user_id, plan)  # همان تراکنش: یا عضو+پلن هر دو، یا هیچ‌کدام
 
     with db_cursor() as cur:
         cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (new_user_id,))
@@ -166,7 +180,8 @@ async def delete_user(user_id: int, request: Request):
     """
     Permanently removes a member: their registration row, their attendance
     history, all of their stored face samples (member_face_samples), all of
-    their recognition-log rows, their workout plan (workout_items), and (if
+    their recognition-log rows, their workout plan (workout_items), their
+    membership purchase history (membership_purchases), and (if
     any) the historical pending_queue row that points at them — all deleted
     in one go because attendance_log.user_id, member_face_samples.user_id,
     recognition_log.user_id, workout_items.user_id, and
@@ -185,6 +200,7 @@ async def delete_user(user_id: int, request: Request):
         cur.execute("DELETE FROM member_face_samples WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM recognition_log WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM workout_items WHERE user_id=?", (user_id,))
+        cur.execute("DELETE FROM membership_purchases WHERE user_id=?", (user_id,))
         cur.execute("DELETE FROM pending_queue WHERE registered_user_id=?", (user_id,))
         cur.execute("DELETE FROM registered_users WHERE id=?", (user_id,))
 
@@ -301,6 +317,37 @@ async def renew_membership(user_id: int, payload: RenewMembershipRequest, reques
         cur.execute("UPDATE registered_users SET membership_expires_at=? WHERE id=?", (new_expiry_iso, user_id))
 
     await manager.broadcast({"event": "membership_updated", "id": user_id, "membership_expires_at": new_expiry_iso})
+
+    with db_cursor() as cur:
+        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        updated_row = cur.fetchone()
+    return _row_to_user_out(updated_row)
+
+
+@router.post("/users/{user_id}/membership/plan", response_model=RegisteredUserOut)
+async def assign_plan(user_id: int, payload: AssignPlanRequest, request: Request):
+    """
+    Registers one of the manager-defined plans (مالی و شهریه > تعرفه‌ها) for a member:
+    the plan's number of days is added to their expiry (on top of the current expiry when
+    it's still in the future, otherwise from now -- same rule as the months-based renew
+    above) and a purchase snapshot is recorded (membership_purchases).
+    """
+    with db_cursor() as cur:
+        cur.execute("SELECT 1 FROM registered_users WHERE id=?", (user_id,))
+        user_exists = cur.fetchone() is not None
+        plan = get_active_plan(cur, payload.plan_id)
+    if not user_exists:
+        raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
+    if plan is None:
+        raise HTTPException(404, "تعرفه‌ی انتخاب‌شده پیدا نشد یا حذف شده است.")
+
+    with db_cursor(commit=True) as cur:
+        new_expiry_iso = apply_plan(cur, user_id, plan)
+
+    await manager.broadcast({
+        "event": "membership_updated", "id": user_id,
+        "membership_expires_at": new_expiry_iso, "last_plan_name": plan["name"],
+    })
 
     with db_cursor() as cur:
         cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
