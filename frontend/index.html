@@ -75,6 +75,14 @@
     font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
   }
   .block-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
+  /* update page */
+  .update-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .update-card h3 { margin: 0 0 4px; font-size: 14.5px; }
+  .update-card .meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .update-notes { white-space: pre-wrap; word-break: break-word; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; line-height: 1.9; max-height: 220px; overflow: auto; margin: 0 0 14px; font-family: inherit; }
+  .update-steps { margin: 0; padding-inline-start: 20px; font-size: 13px; line-height: 2.1; }
+  .update-steps .linklike { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+  .code-block { direction: ltr; text-align: left; background: #0b0e12; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; margin: 4px 0; white-space: pre; overflow-x: auto; }
   .divider { border-top: 1px solid var(--line); margin: 30px 0; }
 
   .overlay {
@@ -861,11 +869,15 @@
       <!-- ============ تنظیمات: به‌روزرسانی سیستم ============ -->
       <div class="page" data-page="settings-update" style="--acc:var(--c-settings)">
         <div class="member-row" style="margin-bottom:18px;">
-          <div class="member-info"><div class="member-name">نسخه‌ی فعلی</div><div class="member-meta">به‌روزرسانی خودکار هنوز پیاده نشده</div></div>
-          <span class="member-status status-none">دستی</span>
+          <div class="member-info">
+            <div class="member-name">نسخه‌ی فعلی</div>
+            <div class="member-meta" id="updateCurrentVersion" dir="ltr" style="text-align:right">—</div>
+          </div>
+          <span class="member-status status-none" id="updateStatusBadge">بررسی نشده</span>
         </div>
-        <p class="block-hint">به‌روزرسانی فعلاً از طریق <code>git pull</code> و rebuild داکر روی سرور انجام می‌شود (در README پروژه توضیح داده شده).</p>
-        <button class="btn-secondary" disabled>بررسی به‌روزرسانی</button>
+        <p class="block-hint" id="updateMessage">برای دیدن آخرین نسخه‌ی منتشرشده، دکمه‌ی زیر را بزنید. این کار فقط یک درخواست به GitHub می‌فرستد و هیچ چیزی روی سیستم تغییر نمی‌کند؛ نصب نسخه‌ی جدید همچنان دستی است.</p>
+        <button class="btn-secondary" id="updateCheckBtn" onclick="checkForUpdate()">بررسی به‌روزرسانی</button>
+        <div id="updateResult" style="margin-top:18px;"></div>
       </div>
 
       <!-- ============ تنظیمات: اطلاعات باشگاه ============ -->
@@ -1057,6 +1069,7 @@ const PAGE_LOADERS = {
   'reception-inout': async () => { await ensureMembersLoaded(); renderInOutList(); },
   'reception-settings-behavior': loadBehaviorSettings,
   'settings-info': loadClubInfo,
+  'settings-update': loadSystemVersion,
   'members-list': loadMembers,
   'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); },
   'members-search': async () => { await ensureMembersLoaded(); renderAdvancedSearch(); },
@@ -1855,6 +1868,110 @@ async function saveBehaviorSettings() {
     return;
   }
   showToast('تنظیمات رفتار ثبت تردد ذخیره شد و بلافاصله فعال شد.');
+}
+
+/* ---- تنظیمات: به‌روزرسانی سیستم (نمایش نسخه + بررسی نسخه‌ی جدید) ----
+   فقط «بررسی» است، نه نصب: نصب خودکار از داخل پنل نیاز به دسترسی root به سرور دارد
+   (نگاه کن به app/routers/system.py). همه‌ی متن‌هایی که از GitHub می‌آیند (نام/توضیحات
+   Release) فقط با textContent نمایش داده می‌شوند، نه innerHTML. */
+const UPDATE_STATUS_UI = {
+  up_to_date:       { badge: 'به‌روز است',               cls: 'status-in' },
+  update_available: { badge: 'نسخه‌ی جدید موجود است',    cls: 'status-expiring' },
+  unknown:          { badge: 'نامشخص',                   cls: 'status-none' },
+  not_found:        { badge: 'Release پیدا نشد',          cls: 'status-none' },
+  rate_limited:     { badge: 'محدودیت GitHub',            cls: 'status-none' },
+  unreachable:      { badge: 'عدم اتصال',                 cls: 'status-out' },
+  disabled:         { badge: 'غیرفعال',                   cls: 'status-none' },
+};
+
+function updateMessageFor(r) {
+  switch (r.status) {
+    case 'up_to_date': return `شما از آخرین نسخه‌ی منتشرشده (${r.latest_version}) استفاده می‌کنید.`;
+    case 'update_available': return `نسخه‌ی ${r.latest_version} منتشر شده است؛ نسخه‌ی شما ${r.current_version} است.`;
+    case 'unknown': return `آخرین نسخه‌ی منتشرشده «${r.latest_version}» است، اما مقایسه‌ی خودکار با نسخه‌ی شما (${r.current_version}) ممکن نشد.`;
+    case 'not_found': return 'هنوز هیچ نسخه‌ای (Release) منتشر نشده یا مخزن خصوصی است؛ بنابراین نسخه‌ی جدیدی قابل تشخیص نیست.';
+    case 'rate_limited': return 'GitHub موقتاً درخواست بیشتری نمی‌پذیرد. کمی بعد دوباره امتحان کنید.';
+    case 'unreachable': return 'اتصال به GitHub برقرار نشد. اینترنت سرور را بررسی کنید و دوباره امتحان کنید.';
+    case 'disabled': return 'بررسی به‌روزرسانی در این نصب غیرفعال است (متغیر محیطی UPDATE_CHECK_REPO خالی یا نامعتبر است).';
+    default: return '';
+  }
+}
+
+async function loadSystemVersion() {
+  try {
+    const res = await fetch(`${API_BASE}/api/system/version`);
+    if (!res.ok) return;
+    const info = await res.json();
+    document.getElementById('updateCurrentVersion').textContent = `v${info.version}`;
+    document.getElementById('updateCheckBtn').disabled = !info.update_check_enabled;
+    if (!info.update_check_enabled) renderUpdateResult({ status: 'disabled', current_version: info.version });
+  } catch { /* سرور لحظه‌ای در دسترس نیست -- نسخه «—» می‌ماند */ }
+}
+
+function makeEl(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  children.forEach(c => node.append(c));
+  return node;
+}
+
+function renderUpdateResult(r) {
+  const ui = UPDATE_STATUS_UI[r.status] || UPDATE_STATUS_UI.unknown;
+  const badge = document.getElementById('updateStatusBadge');
+  badge.textContent = ui.badge;
+  badge.className = `member-status ${ui.cls}`;
+  document.getElementById('updateMessage').textContent = updateMessageFor(r);
+
+  const box = document.getElementById('updateResult');
+  box.replaceChildren();
+  if (r.status !== 'update_available') return;
+
+  const card = makeEl('div', { className: 'update-card' });
+  card.append(makeEl('h3', { textContent: r.release_name ? `${r.latest_version} — ${r.release_name}` : r.latest_version }));
+  if (r.published_at) {
+    let when = '';
+    try { when = new Date(r.published_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' }); } catch { /* تاریخ نامعتبر */ }
+    if (when && when !== 'Invalid Date') card.append(makeEl('div', { className: 'meta', textContent: `منتشرشده در ${when}` }));
+  }
+  if (r.release_notes) card.append(makeEl('pre', { className: 'update-notes', textContent: r.release_notes }));
+  if (r.release_url) {
+    const link = makeEl('a', { href: r.release_url, target: '_blank', rel: 'noopener noreferrer', textContent: 'مشاهده‌ی این نسخه در GitHub' });
+    link.style.cssText = 'display:inline-block; margin-bottom:14px; color:var(--accent);';
+    card.append(link);
+  }
+
+  const backupBtn = makeEl('button', { className: 'linklike', type: 'button', textContent: 'تنظیمات > پشتیبان‌گیری' });
+  backupBtn.addEventListener('click', () => goToPage('settings-backup'));
+  const steps = makeEl('ol', { className: 'update-steps' },
+    makeEl('li', {}, 'قبل از هر چیز از «', backupBtn, '» یک بکاپ بگیرید و فایلش را جای امنی نگه دارید.'),
+    makeEl('li', {}, 'روی سرور، داخل پوشه‌ی پروژه این دو دستور را اجرا کنید:',
+      makeEl('div', { className: 'code-block', textContent: 'git pull\ndocker compose up --build -d' })),
+    makeEl('li', { textContent: 'چند دقیقه صبر کنید (ساخت دوباره‌ی ایمیج زمان‌بر است و پذیرش در این مدت در دسترس نیست)، بعد همین صفحه را رفرش کنید.' }),
+  );
+  card.append(steps);
+  card.append(makeEl('p', {
+    className: 'block-hint',
+    style: 'margin:12px 0 0;',
+    textContent: 'اگر دوربین را با docker-compose.camera.yml وصل کرده‌اید، همان دستور همیشگی خودتان (با همان فایل) را اجرا کنید. اطلاعات و عکس‌ها در پوشه‌ی data می‌مانند. جزئیات کامل در بخش «به‌روزرسانی» فایل README است.',
+  }));
+  box.append(card);
+}
+
+async function checkForUpdate() {
+  const btn = document.getElementById('updateCheckBtn');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'در حال بررسی…';
+  try {
+    const res = await fetch(`${API_BASE}/api/system/check-update`, { method: 'POST' });
+    if (!res.ok) throw new Error(String(res.status));
+    renderUpdateResult(await res.json());
+  } catch {
+    renderUpdateResult({ status: 'unreachable', current_version: '' });
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
 }
 
 /* ---- تنظیمات: اطلاعات باشگاه (واقعی) ---- */

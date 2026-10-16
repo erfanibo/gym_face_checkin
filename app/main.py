@@ -10,7 +10,8 @@ from . import auth, config
 from .database import init_db
 from .face_engine import FaceEngine
 from .routers import auth as auth_router
-from .routers import backup, logs, public, queue, settings, users, workouts
+from .routers import backup, logs, public, queue, settings, system, users, workouts
+from .version import __version__
 from .ws_manager import manager
 
 
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
     engine.stop()
 
 
-app = FastAPI(title="Gym Face Check-in", lifespan=lifespan)
+app = FastAPI(title="Gym Face Check-in", version=__version__, lifespan=lifespan)
 
 # Session cookie (login state) -- must be added before any route that reads
 # request.session. NOTE: allow_credentials below requires the panel to be
@@ -59,6 +60,7 @@ app.include_router(logs.router)
 app.include_router(backup.router)
 app.include_router(workouts.router)
 app.include_router(settings.router)
+app.include_router(system.router)
 
 
 @app.websocket("/ws/queue")
@@ -80,4 +82,4 @@ async def ws_queue(websocket: WebSocket):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}

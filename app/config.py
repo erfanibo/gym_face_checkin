@@ -127,6 +127,18 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").strip() or None
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip() or None
 WEBHOOK_TIMEOUT_SECONDS = float(os.environ.get("WEBHOOK_TIMEOUT_SECONDS", "5"))
 WEBHOOK_MAX_RETRIES = int(os.environ.get("WEBHOOK_MAX_RETRIES", "3"))
+
+# ---------------------------------------------------------------------------
+# Update check (Settings > System update). Only runs when the manager presses the
+# "check for updates" button -- nothing is ever sent in the background, so the
+# system stays fully local otherwise. It asks GitHub for the latest *published
+# Release* of this repo; it never downloads or installs anything.
+#   UPDATE_CHECK_REPO     "owner/repo" to check; set to an empty string to disable.
+#   UPDATE_CHECK_API_BASE GitHub API root (change only for GitHub Enterprise / tests).
+# ---------------------------------------------------------------------------
+UPDATE_CHECK_REPO = os.environ.get("UPDATE_CHECK_REPO", "erfanibo/gym_face_checkin").strip() or None
+UPDATE_CHECK_API_BASE = os.environ.get("UPDATE_CHECK_API_BASE", "https://api.github.com").strip().rstrip("/")
+UPDATE_CHECK_TIMEOUT_SECONDS = float(os.environ.get("UPDATE_CHECK_TIMEOUT_SECONDS", "8"))
 WEBHOOK_RETRY_DELAY_SECONDS = float(os.environ.get("WEBHOOK_RETRY_DELAY_SECONDS", "2"))
 
 # ---------------------------------------------------------------------------

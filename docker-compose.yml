@@ -10,6 +10,9 @@ services:
       - CAMERA_INDEX=0
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      # بررسی نسخه‌ی جدید (تنظیمات > به‌روزرسانی سیستم). «owner/repo» ریپوی خودتان اگر فورک کرده‌اید؛
+      # مقدار خالی (UPDATE_CHECK_REPO=) بررسی را غیرفعال می‌کند. نکته: «-» (نه «:-») تا مقدار خالی هم معتبر بماند.
+      - UPDATE_CHECK_REPO=${UPDATE_CHECK_REPO-erfanibo/gym_face_checkin}
       # Fixed session-signing key -- REQUIRED so logins survive a container
       # restart/rebuild. Generate once with:
       #   python -c "import secrets; print(secrets.token_hex(32))"

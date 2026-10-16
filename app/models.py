@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -184,3 +184,26 @@ class ClubInfo(BaseModel):
 class ClubPublic(BaseModel):
     """فقط چیزی که قبل از لاگین هم نمایش داده می‌شود (GET /api/public/club)."""
     club_name: str
+
+
+# ---------------------------------------------------------------------------
+# تنظیمات > به‌روزرسانی سیستم (routers/system.py)
+# ---------------------------------------------------------------------------
+class VersionInfo(BaseModel):
+    version: str
+    update_check_enabled: bool
+
+
+class UpdateCheckResult(BaseModel):
+    # همیشه با HTTP 200 برمی‌گردد؛ نتیجه‌ی بررسی (حتی «اینترنت نیست») یک status است
+    # نه خطای سرور، تا فرانت همه‌ی حالت‌ها را یکدست نشان بدهد.
+    status: Literal[
+        "up_to_date", "update_available", "unknown",
+        "not_found", "rate_limited", "unreachable", "disabled",
+    ]
+    current_version: str
+    latest_version: Optional[str] = None
+    release_name: Optional[str] = None
+    release_notes: Optional[str] = None
+    release_url: Optional[str] = None
+    published_at: Optional[str] = None
