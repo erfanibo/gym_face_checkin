@@ -26,11 +26,11 @@ def _list_plans() -> list[PlanOut]:
             "SELECT * FROM membership_plans WHERE is_active=1 ORDER BY duration_days ASC, price ASC, id ASC"
         )
         plans = cur.fetchall()
-        # «عضو فعال» = آخرین پلنِ ثبت‌شده برای او همین پلن است و عضویتش هنوز منقضی نشده.
+        # «عضو فعال» = آخرین «تعرفه»‌ی ثبت‌شده برای او (تمدید دستی حساب نمی‌شود) همین پلن است و عضویتش هنوز منقضی نشده.
         cur.execute(
             """SELECT u.membership_expires_at AS expires_at,
                       (SELECT pu.plan_id FROM membership_purchases pu
-                        WHERE pu.user_id = u.id ORDER BY pu.id DESC LIMIT 1) AS plan_id
+                        WHERE pu.user_id = u.id AND pu.plan_id IS NOT NULL ORDER BY pu.id DESC LIMIT 1) AS plan_id
                FROM registered_users u
                WHERE u.membership_expires_at IS NOT NULL"""
         )

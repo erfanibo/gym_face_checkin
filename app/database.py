@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS registered_users (
     -- NULL means "no expiry date has ever been set for this member" (e.g.
     -- anyone registered before this feature existed, or never renewed) --
     -- the admin panel treats that as neutral, NOT expired. Set by the
-    -- membership renew/end endpoints in routers/users.py, as a full UTC
+    -- membership plan/extend/end endpoints in routers/users.py, as a full UTC
     -- ISO-8601 timestamp (to match the convention used everywhere else in
     -- this project, see face_engine.py).
     membership_expires_at   TEXT

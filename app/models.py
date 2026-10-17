@@ -74,8 +74,9 @@ class RegisteredUserOut(BaseModel):
     last_plan_name: Optional[str] = None
 
 
-class RenewMembershipRequest(BaseModel):
-    months: int = Field(..., description="مدت تمدید به ماه؛ باید یکی از ۱، ۳، ۶ یا ۱۲ باشد")
+class ExtendMembershipRequest(BaseModel):
+    # strict=True: فقط عدد صحیح JSON؛ نه رشته‌ی "30" و نه true/1.5
+    days: int = Field(..., ge=1, le=3650, strict=True, description="تعداد روزِ تمدید دستی (بدون تعرفه)")
 
 
 class UpdateUserRequest(BaseModel):

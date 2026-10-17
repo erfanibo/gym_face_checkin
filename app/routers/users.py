@@ -1,4 +1,3 @@
-import calendar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -7,29 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth
 from ..database import db_cursor, generate_unique_membership_code
-from ..membership import apply_plan, get_active_plan
+from ..membership import apply_manual_days, apply_plan, get_active_plan
 from ..models import (
     AssignPlanRequest,
     AttendanceEvent,
+    ExtendMembershipRequest,
     ManualAttendanceRequest,
     ManualRegisterRequest,
     RegisteredUserOut,
-    RenewMembershipRequest,
     UpdateUserRequest,
 )
 from ..ws_manager import manager
-
-_RENEWABLE_MONTHS = (1, 3, 6, 12)
-
-
-def _add_months(dt: datetime, months: int) -> datetime:
-    """Calendar-correct month addition (28/29/30/31-day clamping), e.g. Jan
-    31 + 1 month -> Feb 28/29, not an error and not Mar 3."""
-    month_index = dt.month - 1 + months
-    year = dt.year + month_index // 12
-    month = month_index % 12 + 1
-    day = min(dt.day, calendar.monthrange(year, month)[1])
-    return dt.replace(year=year, month=month, day=day)
 
 # Every endpoint here is manager-only (member data management) -- the member
 # panel gets its own separate, read-only "my own data" endpoints later.
@@ -38,7 +25,7 @@ router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.req
 _USER_WITH_ATTENDANCE_SELECT = """
     SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type,
            EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample,
-           (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id ORDER BY pu.id DESC LIMIT 1) AS last_plan_name
+           (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id AND pu.plan_id IS NOT NULL ORDER BY pu.id DESC LIMIT 1) AS last_plan_name
     FROM registered_users u
     LEFT JOIN (
         SELECT a1.user_id, a1.checkin_at, a1.event_type
@@ -283,38 +270,22 @@ async def set_attendance(user_id: int, payload: ManualAttendanceRequest, request
     )
 
 
-@router.patch("/users/{user_id}/membership/renew", response_model=RegisteredUserOut)
-async def renew_membership(user_id: int, payload: RenewMembershipRequest, request: Request):
+@router.post("/users/{user_id}/membership/extend", response_model=RegisteredUserOut)
+async def extend_membership(user_id: int, payload: ExtendMembershipRequest, request: Request):
     """
-    Extends a member's expiry date by a fixed number of months (admin panel
-    only offers 1/3/6/12, enforced here too so a hand-crafted request can't
-    send anything else). If the member still has time left, the new months
-    are added ON TOP of their current expiry (not from today) so renewing
-    early never costs them days; if they're already expired (or never had
-    an expiry set), the new period starts from now.
+    Manual extension WITHOUT a plan (gift, compensation for downtime, correcting a mistake):
+    adds `days` to the expiry -- on top of the current expiry when it is still in the future,
+    otherwise from now. It is recorded in the purchase history as "تمدید دستی" with price 0 so
+    the history stays complete and financial reports are not distorted. Normal renewals go
+    through a plan (POST .../membership/plan).
     """
-    if payload.months not in _RENEWABLE_MONTHS:
-        raise HTTPException(400, "مدت تمدید باید یکی از ۱، ۳، ۶ یا ۱۲ ماه باشد")
-
     with db_cursor() as cur:
-        cur.execute("SELECT membership_expires_at FROM registered_users WHERE id=?", (user_id,))
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
-
-    now = datetime.now(timezone.utc)
-    current_expiry = None
-    if row["membership_expires_at"]:
-        try:
-            current_expiry = datetime.fromisoformat(row["membership_expires_at"])
-        except ValueError:
-            current_expiry = None
-
-    base = current_expiry if (current_expiry and current_expiry > now) else now
-    new_expiry_iso = _add_months(base, payload.months).isoformat()
+        cur.execute("SELECT 1 FROM registered_users WHERE id=?", (user_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
 
     with db_cursor(commit=True) as cur:
-        cur.execute("UPDATE registered_users SET membership_expires_at=? WHERE id=?", (new_expiry_iso, user_id))
+        new_expiry_iso = apply_manual_days(cur, user_id, payload.days)
 
     await manager.broadcast({"event": "membership_updated", "id": user_id, "membership_expires_at": new_expiry_iso})
 
@@ -329,8 +300,7 @@ async def assign_plan(user_id: int, payload: AssignPlanRequest, request: Request
     """
     Registers one of the manager-defined plans (مالی و شهریه > تعرفه‌ها) for a member:
     the plan's number of days is added to their expiry (on top of the current expiry when
-    it's still in the future, otherwise from now -- same rule as the months-based renew
-    above) and a purchase snapshot is recorded (membership_purchases).
+    it's still in the future, otherwise from now -- same rule as the manual extension) and a purchase snapshot is recorded (membership_purchases).
     """
     with db_cursor() as cur:
         cur.execute("SELECT 1 FROM registered_users WHERE id=?", (user_id,))
