@@ -40,12 +40,12 @@ async def set_my_password(payload: SetMemberPasswordRequest, user_id: int = Depe
             raise HTTPException(429, ratelimit.TOO_MANY_MESSAGE)
         if not payload.current_password or not auth.verify_password(payload.current_password, stored):
             ratelimit.member_password_change.record(limiter_key)
-            raise HTTPException(401, "رمز فعلی درست نیست.")
+            raise HTTPException(401, "رمز عبور فعلی درست نیست.")
         ratelimit.member_password_change.clear(limiter_key)
 
     # the phone number is what an outsider is most likely to guess
     if phone_key(payload.new_password) is not None and phone_key(payload.new_password) == phone_key(row["phone"]):
-        raise HTTPException(400, "رمز نباید همان شماره تماس باشد.")
+        raise HTTPException(400, "رمز عبور نباید با شماره تماس یکسان باشد.")
 
     if not auth.set_member_password(user_id, payload.new_password):
         raise HTTPException(401, "این عضویت دیگر وجود ندارد؛ لطفاً دوباره وارد شوید.")

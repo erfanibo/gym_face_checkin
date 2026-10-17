@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>برنامه‌ی تمرینی من</title>
+<title>پنل کاربری</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -34,8 +34,14 @@
     background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
     width: 100%; padding: 32px 24px; display: flex; flex-direction: column; gap: 14px;
   }
-  .login-card h1 { font-size: 19px; margin: 0; text-align: center; }
-  .login-card h1 span { display: block; color: var(--muted); font-weight: 400; font-size: 13px; margin-top: 6px; }
+  .login-card h1 { font-size: 19px; margin: 0 0 6px; text-align: center; }
+  /* سربرگ: «نام باشگاه | پنل کاربری» */
+  .brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; line-height: 1.7; }
+  .login-card .brand { justify-content: center; }
+  .brand .brand-sep { color: var(--muted); font-weight: 400; }
+  .brand .brand-sub { color: var(--muted); font-weight: 500; font-size: .86em; }
+  .brand.no-club .brand-club, .brand.no-club .brand-sep { display: none; }
+  .brand.no-club .brand-sub { color: var(--text); font-size: 1em; font-weight: 700; }
   label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
   input {
     width: 100%; background: var(--panel-2); border: 1px solid var(--line);
@@ -52,11 +58,11 @@
   .btn-primary:active { opacity: 0.85; }
 
   /* plan view */
-  .app-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; gap: 10px; }
-  .app-header h1 { font-size: 18px; margin: 0; }
-  .club-name { color: var(--muted); font-size: 12px; margin-bottom: 4px; text-align: center; }
-  .app-header .club-name { text-align: start; }
+  .app-header { margin-bottom: 18px; }
+  .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-top: 8px; }
+  .app-header h1 { margin: 0; }
   .app-header .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .app-header .brand { font-size: 17px; font-weight: 700; }
   .logout-btn {
     background: transparent; border: 1px solid var(--line); color: var(--muted);
     border-radius: 8px; padding: 9px 13px; font-size: 12px; font-family: inherit; cursor: pointer; flex-shrink: 0;
@@ -91,7 +97,6 @@
     font-size: 12px; padding: 8px 10px; cursor: pointer; border-radius: 7px;
   }
   .pw-toggle:hover { color: var(--text); }
-  .login-hint { color: var(--muted); font-size: 12px; line-height: 1.8; margin: -4px 0 0; }
   input[dir="ltr"] { text-align: right; }
   input[dir="ltr"]::placeholder { text-align: right; }
   .btn-primary:disabled { opacity: .55; cursor: default; }
@@ -110,9 +115,8 @@
   .notice svg { color: var(--warn); margin-top: 2px; }
   .notice-text { font-size: 13px; line-height: 1.8; min-width: 0; }
   .notice-text b { display: block; font-size: 14px; color: var(--warn); }
-  .notice-text span { display: block; color: var(--muted); font-size: 12px; }
   .notice-btn {
-    margin-top: 10px; background: var(--warn); color: #1c1403; border: none; border-radius: 8px;
+    margin-top: 8px; background: var(--warn); color: #1c1403; border: none; border-radius: 8px;
     padding: 9px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
   }
   .notice-x {
@@ -133,7 +137,6 @@
     display: flex; flex-direction: column; gap: 12px; max-height: 92vh; overflow-y: auto;
   }
   .sheet h2 { font-size: 16px; margin: 0; }
-  .sheet p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.9; }
   .sheet-actions { display: flex; gap: 10px; margin-top: 4px; }
   .sheet-actions .btn-primary { flex: 1; }
   .btn-secondary {
@@ -154,20 +157,18 @@
 <div class="screen" id="loginScreen">
   <div class="login-wrap">
     <form class="login-card" id="loginForm" onsubmit="submitLogin(event)" novalidate>
-      <div class="club-name" id="loginClubName"></div>
-      <h1>برنامه‌ی تمرینی من <span>با شماره‌ای که در باشگاه ثبت کرده‌ای وارد شو</span></h1>
+      <h1 class="brand no-club" id="loginBrand"><span class="brand-club" id="loginClubName"></span><span class="brand-sep">|</span><span class="brand-sub">پنل کاربری</span></h1>
       <div class="field">
         <label for="loginPhone">شماره تماس</label>
         <input id="loginPhone" name="username" type="tel" inputmode="tel" dir="ltr" placeholder="09xxxxxxxxx" autocomplete="username" />
       </div>
       <div class="field">
-        <label for="loginPassword">رمز عبور <span class="opt">(اگر تعیین کرده‌ای)</span></label>
+        <label for="loginPassword">رمز عبور <span class="opt">(در صورت تعیین رمز)</span></label>
         <div class="pw-wrap">
           <input id="loginPassword" name="password" type="password" dir="ltr" autocomplete="current-password" />
           <button type="button" class="pw-toggle" onclick="togglePassword('loginPassword', this)">نمایش</button>
         </div>
       </div>
-      <p class="login-hint">هنوز رمز نگذاشته‌ای؟ فقط شماره‌ات را وارد کن. بعد از ورود می‌توانی برای امنیت بیشتر رمز بگذاری.</p>
       <div class="error-msg" id="loginError" role="alert"></div>
       <button class="btn-primary" id="loginBtn" type="submit">ورود</button>
     </form>
@@ -176,25 +177,26 @@
 
 <div class="screen" id="appScreen" style="display:none">
   <div class="app-header">
-    <div>
-      <div class="club-name" id="appClubName"></div>
-      <h1 id="appTitle">برنامه‌ی تمرینی من</h1>
-      <div class="sub" id="updatedNote"></div>
-    </div>
-    <div class="header-actions">
-      <button class="logout-btn" id="passwordBtn" onclick="openPasswordSheet()">رمز عبور</button>
-      <button class="logout-btn" onclick="logout()">خروج</button>
+    <h1 class="brand no-club" id="appBrand"><span class="brand-club" id="appClubName"></span><span class="brand-sep">|</span><span class="brand-sub">پنل کاربری</span></h1>
+    <div class="header-row">
+      <div>
+        <div class="sub" id="memberGreeting"></div>
+        <div class="sub" id="updatedNote"></div>
+      </div>
+      <div class="header-actions">
+        <button class="logout-btn" id="passwordBtn" onclick="openPasswordSheet()">رمز عبور</button>
+        <button class="logout-btn" onclick="logout()">خروج</button>
+      </div>
     </div>
   </div>
 
   <div class="notice" id="passwordNotice" hidden>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
     <div class="notice-text">
-      <b>برای افزایش امنیت، رمز عبور ثبت کن</b>
-      <span>فعلاً هر کسی که شماره‌ات را بداند می‌تواند وارد برنامه‌ات شود. با رمز، ورود فقط با «شماره + رمز» ممکن است.</span>
+      <b>برای افزایش امنیت، رمز عبور ثبت کنید.</b>
       <button class="notice-btn" onclick="openPasswordSheet()">تعیین رمز</button>
     </div>
-    <button class="notice-x" aria-label="بستن هشدار" title="فعلاً نه" onclick="dismissNotice()">×</button>
+    <button class="notice-x" aria-label="بستن هشدار" title="بستن" onclick="dismissNotice()">×</button>
   </div>
 
   <div id="planList"></div>
@@ -203,25 +205,24 @@
 <div class="sheet-backdrop" id="passwordSheet" onclick="if(event.target===this) closePasswordSheet()">
   <form class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" onsubmit="submitPassword(event)" novalidate>
     <h2 id="sheetTitle">تعیین رمز عبور</h2>
-    <p id="sheetHelp">از این به بعد برای ورود، شماره تماس و همین رمز را وارد می‌کنی. رمز را فراموش کردی، به مربی یا پذیرش بگو تا آن را پاک کنند.</p>
     <div class="field" id="sheetCurrentField" style="display:none">
-      <label for="sheetCurrent">رمز فعلی</label>
+      <label for="sheetCurrent">رمز عبور فعلی</label>
       <input id="sheetCurrent" type="password" dir="ltr" autocomplete="current-password" />
     </div>
     <div class="field">
-      <label for="sheetNew">رمز جدید <span class="opt">(حداقل ۶ کاراکتر)</span></label>
+      <label for="sheetNew">رمز عبور جدید <span class="opt">(حداقل ۶ کاراکتر)</span></label>
       <div class="pw-wrap">
         <input id="sheetNew" type="password" dir="ltr" autocomplete="new-password" />
         <button type="button" class="pw-toggle" onclick="togglePassword('sheetNew', this)">نمایش</button>
       </div>
     </div>
     <div class="field">
-      <label for="sheetRepeat">تکرار رمز جدید</label>
+      <label for="sheetRepeat">تکرار رمز عبور جدید</label>
       <input id="sheetRepeat" type="password" dir="ltr" autocomplete="new-password" />
     </div>
     <div class="error-msg" id="sheetError" role="alert"></div>
     <div class="sheet-actions">
-      <button class="btn-primary" id="sheetSaveBtn" type="submit">ذخیره رمز</button>
+      <button class="btn-primary" id="sheetSaveBtn" type="submit">ذخیره</button>
       <button class="btn-secondary" type="button" onclick="closePasswordSheet()">انصراف</button>
     </div>
   </form>
@@ -247,12 +248,14 @@ function timeAgo(iso) {
   return `${days} روز پیش`;
 }
 
-/* نام باشگاه از «تنظیمات > اطلاعات باشگاه» پنل مدیر می‌آید (مسیر عمومی، قبل از لاگین هم کار می‌کند). */
+/* نام باشگاه از «تنظیمات > اطلاعات باشگاه» پنل مدیر می‌آید (مسیر عمومی، قبل از لاگین هم کار می‌کند).
+   سربرگ هر دو صفحه: «نام باشگاه | پنل کاربری». */
 function applyClubName(name) {
   const clean = (name || '').trim();
-  document.title = clean ? `برنامه‌ی تمرینی من | ${clean}` : 'برنامه‌ی تمرینی من';
+  document.title = clean ? `${clean} | پنل کاربری` : 'پنل کاربری';
   document.getElementById('loginClubName').textContent = clean;   // textContent: نام را کاربر وارد کرده
   document.getElementById('appClubName').textContent = clean;
+  for (const id of ['loginBrand', 'appBrand']) document.getElementById(id).classList.toggle('no-club', !clean);
 }
 
 async function loadPublicClubName() {
@@ -302,7 +305,7 @@ async function submitLogin(event) {
   const password = document.getElementById('loginPassword').value;
 
   if (!phone) {
-    errorEl.textContent = 'شماره تماس را وارد کن.';
+    errorEl.textContent = 'لطفاً شماره تماس را وارد کنید.';
     return;
   }
 
@@ -318,9 +321,9 @@ async function submitLogin(event) {
       const err = await res.json().catch(() => ({}));
       const detail = typeof err.detail === 'string' ? err.detail : '';
       if (res.status === 401 && !password) {
-        errorEl.textContent = 'شماره تماس پیدا نشد؛ یا اگر رمز تعیین کرده‌ای، رمزت را هم وارد کن.';
+        errorEl.textContent = 'شماره تماس یافت نشد. در صورتی که رمز عبور تعیین کرده‌اید، آن را نیز وارد کنید.';
       } else {
-        errorEl.textContent = detail || 'ورود انجام نشد. دوباره تلاش کن.';
+        errorEl.textContent = detail || 'ورود انجام نشد. لطفاً دوباره تلاش کنید.';
       }
       return;
     }
@@ -328,7 +331,7 @@ async function submitLogin(event) {
     try { sessionStorage.removeItem('pwNoticeDismissed'); } catch { /* حافظه‌ی مرورگر در دسترس نیست؛ مهم نیست */ }
     showApp();
   } catch {
-    errorEl.textContent = 'ارتباط با سرور برقرار نشد. مطمئن شو به وای‌فای باشگاه وصلی.';
+    errorEl.textContent = 'ارتباط با سرور برقرار نشد. لطفاً اتصال خود به شبکهٔ باشگاه را بررسی کنید.';
   } finally {
     btn.disabled = false;
   }
@@ -343,7 +346,7 @@ async function logout() {
 /* ---- پروفایل، هشدار امنیتی و تعیین رمز ---- */
 async function loadProfile() {
   const res = await fetch(`${API_BASE}/api/me/profile`);
-  if (res.status === 401) { showLogin('نشست شما منقضی شده. دوباره وارد شوید.'); return; }
+  if (res.status === 401) { showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'); return; }
   if (!res.ok) return;
   profile = await res.json();
   renderProfile();
@@ -355,7 +358,7 @@ function noticeDismissed() {
 
 function renderProfile() {
   if (!profile) return;
-  document.getElementById('appTitle').textContent = `سلام، ${profile.full_name}`;   // textContent: نام را مدیر وارد کرده
+  document.getElementById('memberGreeting').textContent = `خوش آمدید، ${profile.full_name}`;   // textContent: نام را مدیر وارد کرده
   document.getElementById('passwordBtn').textContent = profile.has_password ? 'تغییر رمز' : 'رمز عبور';
   document.getElementById('passwordNotice').hidden = profile.has_password || noticeDismissed();
 }
@@ -406,10 +409,10 @@ async function submitPassword(event) {
   const next = document.getElementById('sheetNew').value;
   const repeat = document.getElementById('sheetRepeat').value;
 
-  if (profile.has_password && !current) { errorEl.textContent = 'رمز فعلی را وارد کن.'; return; }
-  if (next.length < 6) { errorEl.textContent = 'رمز جدید باید حداقل ۶ کاراکتر باشد.'; return; }
-  if (!next.trim()) { errorEl.textContent = 'رمز نمی‌تواند فقط فاصله باشد.'; return; }
-  if (next !== repeat) { errorEl.textContent = 'تکرار رمز با رمز جدید یکی نیست.'; return; }
+  if (profile.has_password && !current) { errorEl.textContent = 'لطفاً رمز عبور فعلی را وارد کنید.'; return; }
+  if (next.length < 6) { errorEl.textContent = 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.'; return; }
+  if (!next.trim()) { errorEl.textContent = 'رمز عبور نمی‌تواند فقط شامل فاصله باشد.'; return; }
+  if (next !== repeat) { errorEl.textContent = 'تکرار رمز عبور با رمز عبور جدید مطابقت ندارد.'; return; }
 
   btn.disabled = true;
   try {
@@ -418,20 +421,20 @@ async function submitPassword(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_password: next, current_password: profile.has_password ? current : null }),
     });
-    if (res.status === 401 && !profile.has_password) { closePasswordSheet(); showLogin('نشست شما منقضی شده. دوباره وارد شوید.'); return; }
+    if (res.status === 401 && !profile.has_password) { closePasswordSheet(); showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'); return; }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       errorEl.textContent = typeof err.detail === 'string' ? err.detail
-        : (res.status === 422 ? 'رمز جدید باید بین ۶ تا ۱۲۸ کاراکتر باشد.' : 'ذخیره‌ی رمز انجام نشد.');
+        : (res.status === 422 ? 'رمز عبور جدید باید بین ۶ تا ۱۲۸ کاراکتر باشد.' : 'ذخیرهٔ رمز عبور انجام نشد.');
       return;
     }
     const firstTime = !profile.has_password;
     profile.has_password = true;
     renderProfile();
     closePasswordSheet();
-    showToast(firstTime ? 'رمز ذخیره شد. دفعه‌ی بعد با شماره و رمز وارد شو.' : 'رمز عبور عوض شد.');
+    showToast(firstTime ? 'رمز عبور ذخیره شد. از این پس برای ورود، شماره تماس و رمز عبور را وارد کنید.' : 'رمز عبور با موفقیت تغییر کرد.');
   } catch {
-    errorEl.textContent = 'ارتباط با سرور برقرار نشد.';
+    errorEl.textContent = 'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.';
   } finally {
     btn.disabled = false;
   }
@@ -440,7 +443,7 @@ async function submitPassword(event) {
 async function loadPlan() {
   const res = await fetch(`${API_BASE}/api/me/workout`);
   if (res.status === 401) {
-    showLogin('نشست شما منقضی شده. دوباره وارد شوید.');
+    showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
     return;
   }
   const data = await res.json();
@@ -453,7 +456,7 @@ async function loadPlan() {
 function renderPlan(items) {
   const list = document.getElementById('planList');
   if (!items.length) {
-    list.innerHTML = '<div class="empty-plan">هنوز برنامه‌ای برایت ثبت نشده.<br>با مربی‌ات در باشگاه صحبت کن.</div>';
+    list.innerHTML = '<div class="empty-plan">هنوز برنامه‌ای برای شما ثبت نشده است.<br>لطفاً با مربی باشگاه هماهنگ کنید.</div>';
     return;
   }
   list.innerHTML = items.map(item => `
@@ -471,7 +474,7 @@ function renderPlan(items) {
 async function toggleItem(itemId) {
   const res = await fetch(`${API_BASE}/api/me/workout/${itemId}/toggle`, { method: 'PATCH' });
   if (res.status === 401) {
-    showLogin('نشست شما منقضی شده. دوباره وارد شوید.');
+    showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
     return;
   }
   if (!res.ok) return;

@@ -1775,7 +1775,7 @@ function renderMembers() {
 
 async function resetMemberPassword(id) {
   const member = members.find(m => m.id === id);
-  if (!confirm(`رمز پنل «${member ? member.full_name : ''}» حذف شود؟ بعد از آن، عضو فقط با شماره تماس وارد می‌شود و می‌تواند رمز تازه‌ای بگذارد.`)) return;
+  if (!confirm(`رمز عبور پنل «${member ? member.full_name : ''}» حذف شود؟ پس از آن، عضو فقط با شماره تماس وارد می‌شود و می‌تواند رمز عبور جدید تعیین کند.`)) return;
   const res = await fetch(`${API_BASE}/api/users/${id}/member-password`, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1784,7 +1784,7 @@ async function resetMemberPassword(id) {
   }
   if (member) member.has_member_password = false;
   renderMembers();
-  showToast(`رمز پنل <b>${escapeText(member ? member.full_name : '')}</b> حذف شد.`);
+  showToast(`رمز عبور پنل <b>${escapeText(member ? member.full_name : '')}</b> حذف شد.`);
 }
 
 /* ---- مربی: برنامه‌ی تمرینی (انتخاب عضو) ---- */
