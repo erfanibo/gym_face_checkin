@@ -85,7 +85,7 @@
   .exercise-meta { color: var(--muted); font-size: 13px; }
   .exercise-notes { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
-  .empty-plan { text-align: center; color: var(--muted); padding: 70px 20px; line-height: 2; }
+  .empty-plan { text-align: center; color: var(--muted); padding: 50px 20px; line-height: 2; }
 
   /* login extras */
   label .opt { color: var(--muted); font-weight: 400; opacity: .8; }
@@ -107,21 +107,21 @@
 
   /* security notice */
   .notice {
-    display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
     background: rgba(240, 180, 60, .10); border: 1px solid rgba(240, 180, 60, .45);
-    border-radius: 12px; padding: 14px; margin-bottom: 16px;
+    border-radius: 12px; padding: 9px 10px 9px 8px; margin-bottom: 14px;
   }
   .notice[hidden] { display: none; }
-  .notice svg { color: var(--warn); margin-top: 2px; }
-  .notice-text { font-size: 13px; line-height: 1.8; min-width: 0; }
-  .notice-text b { display: block; font-size: 14px; color: var(--warn); }
+  .notice svg { color: var(--warn); flex-shrink: 0; width: 20px; height: 20px; }
+  .notice-text { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; flex-wrap: wrap; }
+  .notice-text b { font-size: 13px; color: var(--warn); line-height: 1.7; flex: 1 1 150px; }
   .notice-btn {
-    margin-top: 8px; background: var(--warn); color: #1c1403; border: none; border-radius: 8px;
-    padding: 9px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+    background: var(--warn); color: #1c1403; border: none; border-radius: 8px;
+    padding: 7px 14px; font-size: 12.5px; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
   }
   .notice-x {
     background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1;
-    cursor: pointer; padding: 0 6px; font-family: inherit; border-radius: 6px;
+    cursor: pointer; padding: 0 6px; font-family: inherit; border-radius: 6px; flex-shrink: 0;
   }
   .notice-x:hover { color: var(--text); }
 
@@ -144,12 +144,66 @@
     padding: 14px 18px; font-size: 15px; font-family: inherit; cursor: pointer;
   }
   .toast {
-    position: fixed; inset-inline: 16px; bottom: 20px; margin: 0 auto; max-width: 440px; z-index: 30;
+    position: fixed; inset-inline: 16px; bottom: 90px; margin: 0 auto; max-width: 440px; z-index: 30;
     background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
     border-radius: 12px; padding: 13px 16px; font-size: 13px; line-height: 1.8; display: none;
   }
   .toast.show { display: block; }
   @media (min-width: 520px) { .sheet-backdrop { align-items: center; } .sheet { border-radius: 18px; border-bottom: 1px solid var(--line); } }
+
+  /* sections + bottom navigation */
+  #appScreen { padding-bottom: 96px; }
+  .view[hidden] { display: none; }
+  .view-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 4px 0 14px; }
+  .view-title h2 { font-size: 16px; margin: 0; }
+  .view-title .sub { color: var(--muted); font-size: 12px; }
+  .tabbar {
+    position: fixed; bottom: 0; inset-inline: 0; margin: 0 auto; width: 100%; max-width: 480px; z-index: 10;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    background: var(--panel); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tab {
+    background: transparent; border: none; color: var(--muted); font-family: inherit; font-size: 11.5px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; border-radius: 10px; cursor: pointer;
+  }
+  .tab svg { width: 22px; height: 22px; }
+  .tab[aria-current="page"] { color: var(--accent); background: rgba(61, 220, 151, .09); font-weight: 600; }
+  .tab:focus-visible, .tile:focus-visible, .btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px;
+  }
+  .card-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .big { font-size: 26px; font-weight: 700; line-height: 1.4; }
+  .big small { font-size: 13px; font-weight: 400; color: var(--muted); margin-inline-start: 6px; }
+  .card-sub { color: var(--muted); font-size: 13px; line-height: 1.9; margin-top: 4px; }
+  .card.st-active { border-color: rgba(61, 220, 151, .5); }
+  .card.st-active .big { color: var(--accent); }
+  .card.st-soon { border-color: rgba(240, 180, 60, .55); }
+  .card.st-soon .big { color: var(--warn); }
+  .card.st-expired { border-color: rgba(224, 86, 86, .55); }
+  .card.st-expired .big { color: var(--danger); }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .tile {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: start;
+    color: var(--text); font-family: inherit; cursor: pointer; display: block; width: 100%;
+  }
+  .tile .big { font-size: 20px; }
+  .bar { height: 6px; border-radius: 4px; background: var(--panel-2); margin-top: 10px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; width: 0; transition: width .25s ease; }
+
+  .list-row {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .list-row .title { font-size: 14px; font-weight: 600; }
+  .list-row .meta { color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.8; }
+  .list-row .amount { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .chip { font-size: 11.5px; border-radius: 20px; padding: 3px 10px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.in { color: var(--accent); border-color: rgba(61, 220, 151, .5); }
+  .chip.out { color: var(--warn); border-color: rgba(240, 180, 60, .5); }
+  .empty-note { text-align: center; color: var(--muted); padding: 36px 16px; line-height: 2; font-size: 13.5px; }
+  .section-gap { height: 6px; }
 </style>
 </head>
 <body>
@@ -181,7 +235,6 @@
     <div class="header-row">
       <div>
         <div class="sub" id="memberGreeting"></div>
-        <div class="sub" id="updatedNote"></div>
       </div>
       <div class="header-actions">
         <button class="logout-btn" id="passwordBtn" onclick="openPasswordSheet()">رمز عبور</button>
@@ -199,7 +252,61 @@
     <button class="notice-x" aria-label="بستن هشدار" title="بستن" onclick="dismissNotice()">×</button>
   </div>
 
-  <div id="planList"></div>
+  <section class="view" id="view-dashboard" data-view="dashboard">
+    <div class="view-title"><h2>داشبورد</h2></div>
+    <div class="card" id="dashMembership">
+      <div class="card-label">وضعیت عضویت</div>
+      <div class="big" id="dashMembershipMain">—</div>
+      <div class="card-sub" id="dashMembershipSub"></div>
+    </div>
+    <div class="tiles">
+      <button class="tile" type="button" onclick="showView('workout')">
+        <div class="card-label">پیشرفت برنامه تمرینی</div>
+        <div class="big" id="dashWorkoutMain">—</div>
+        <div class="bar" aria-hidden="true"><i id="dashWorkoutBar"></i></div>
+      </button>
+      <button class="tile" type="button" onclick="showView('attendance')">
+        <div class="card-label">ورود در ۳۰ روز گذشته</div>
+        <div class="big" id="dashVisitsMain">—</div>
+      </button>
+    </div>
+    <div class="card">
+      <div class="card-label">آخرین ورود به باشگاه</div>
+      <div class="card-sub" style="margin:0; color:var(--text)" id="dashLastVisit">—</div>
+    </div>
+  </section>
+
+  <section class="view" id="view-workout" data-view="workout" hidden>
+    <div class="view-title"><h2>برنامه تمرینی</h2><span class="sub" id="updatedNote"></span></div>
+    <div id="planList"></div>
+  </section>
+
+  <section class="view" id="view-membership" data-view="membership" hidden>
+    <div class="view-title"><h2>شهریه و عضویت</h2></div>
+    <div class="card" id="memMembership">
+      <div class="card-label">وضعیت عضویت</div>
+      <div class="big" id="memMembershipMain">—</div>
+      <div class="card-sub" id="memMembershipSub"></div>
+    </div>
+    <div class="view-title" style="margin-top:18px"><h2>سابقه تمدیدها</h2></div>
+    <div id="purchaseList"></div>
+  </section>
+
+  <section class="view" id="view-attendance" data-view="attendance" hidden>
+    <div class="view-title"><h2>سابقه حضور</h2></div>
+    <div class="tiles">
+      <div class="tile" style="cursor:default"><div class="card-label">ورود در ۳۰ روز گذشته</div><div class="big" id="attVisits">—</div></div>
+      <div class="tile" style="cursor:default"><div class="card-label">آخرین ورود</div><div class="card-sub" style="margin:0; color:var(--text)" id="attLast">—</div></div>
+    </div>
+    <div id="attendanceList"></div>
+  </section>
+
+  <nav class="tabbar" aria-label="بخش‌های پنل">
+    <button class="tab" type="button" data-tab="dashboard" onclick="showView('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>داشبورد</span></button>
+    <button class="tab" type="button" data-tab="workout" onclick="showView('workout')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg><span>برنامه تمرینی</span></button>
+    <button class="tab" type="button" data-tab="membership" onclick="showView('membership')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></svg><span>شهریه</span></button>
+    <button class="tab" type="button" data-tab="attendance" onclick="showView('attendance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>سابقه حضور</span></button>
+  </nav>
 </div>
 
 <div class="sheet-backdrop" id="passwordSheet" onclick="if(event.target===this) closePasswordSheet()">
@@ -237,15 +344,19 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function toFaDigits(value) {
+  return String(value).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+}
+
 function timeAgo(iso) {
-  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return `${seconds} ثانیه پیش`;
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return `${toFaDigits(seconds)} ثانیه پیش`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} دقیقه پیش`;
+  if (minutes < 60) return `${toFaDigits(minutes)} دقیقه پیش`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ساعت پیش`;
+  if (hours < 24) return `${toFaDigits(hours)} ساعت پیش`;
   const days = Math.floor(hours / 24);
-  return `${days} روز پیش`;
+  return `${toFaDigits(days)} روز پیش`;
 }
 
 /* نام باشگاه از «تنظیمات > اطلاعات باشگاه» پنل مدیر می‌آید (مسیر عمومی، قبل از لاگین هم کار می‌کند).
@@ -283,11 +394,138 @@ function showLogin(message) {
   document.getElementById('loginError').textContent = message || '';
 }
 
+const VIEWS = ['dashboard', 'workout', 'membership', 'attendance'];
+const state = { plan: null, membership: null, attendance: null };
+
+async function getJson(path) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (res.status === 401) { showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'); return null; }
+  if (!res.ok) return null;
+  return res.json();
+}
+
 async function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  await Promise.all([loadProfile(), loadPlan()]);
+  showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard', false);
+  await Promise.all([loadProfile(), loadPlan(), loadMembership(), loadAttendance()]);
 }
+
+function showView(name, scroll = true) {
+  if (!VIEWS.includes(name)) name = 'dashboard';
+  for (const v of VIEWS) document.getElementById(`view-${v}`).hidden = (v !== name);
+  for (const tab of document.querySelectorAll('.tab')) {
+    if (tab.dataset.tab === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+  }
+  try { history.replaceState(null, '', `#${name}`); } catch { /* مهم نیست */ }
+  if (scroll) window.scrollTo(0, 0);
+}
+
+/* ---- قالب‌بندی (ارقام و تاریخ فارسی) ---- */
+const faNum = new Intl.NumberFormat('fa-IR');
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDateTime(iso) { return `${fmtDate(iso)} — ${fmtTime(iso)}`; }
+function fmtPrice(price) { return price > 0 ? `${faNum.format(price)} تومان` : 'بدون هزینه'; }
+
+function makeEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;   // textContent: نام تعرفه را مدیر وارد کرده
+  return el;
+}
+
+/* ---- کارت وضعیت عضویت (هم در داشبورد، هم در بخش شهریه) ---- */
+const SOON_DAYS = 7;
+function renderMembershipCard(cardId, mainId, subId, m) {
+  const card = document.getElementById(cardId), main = document.getElementById(mainId), sub = document.getElementById(subId);
+  card.classList.remove('st-active', 'st-soon', 'st-expired');
+  sub.replaceChildren();
+  if (!m) { main.textContent = '—'; sub.textContent = 'اطلاعات عضویت در دسترس نیست. لطفاً دوباره تلاش کنید.'; return; }
+  const lines = [];
+  if (m.status === 'active') {
+    const soon = m.days_left <= SOON_DAYS;
+    card.classList.add(soon ? 'st-soon' : 'st-active');
+    main.textContent = '';
+    main.append(`${faNum.format(m.days_left)}`, makeEl('small', '', 'روز تا پایان عضویت'));
+    lines.push(`تاریخ پایان: ${fmtDate(m.membership_expires_at)}`);
+    if (soon) lines.push('عضویت شما به‌زودی پایان می‌یابد؛ لطفاً برای تمدید به پذیرش مراجعه کنید.');
+  } else if (m.status === 'expired') {
+    card.classList.add('st-expired');
+    main.textContent = 'منقضی شده';
+    lines.push(`عضویت شما در تاریخ ${fmtDate(m.membership_expires_at)} پایان یافته است. لطفاً برای تمدید به پذیرش مراجعه کنید.`);
+  } else {
+    main.textContent = 'ثبت نشده';
+    lines.push('تاریخ پایان عضویت شما هنوز ثبت نشده است.');
+  }
+  if (m.last_plan_name) lines.push(`آخرین تعرفه: ${m.last_plan_name}`);
+  for (const line of lines) sub.append(makeEl('div', '', line));
+}
+
+function renderDashboard() {
+  renderMembershipCard('dashMembership', 'dashMembershipMain', 'dashMembershipSub', state.membership);
+
+  const items = state.plan ? state.plan.items : null;
+  const main = document.getElementById('dashWorkoutMain'), bar = document.getElementById('dashWorkoutBar');
+  if (!items) { main.textContent = '—'; bar.style.width = '0'; }
+  else if (!items.length) { main.textContent = 'بدون برنامه'; bar.style.width = '0'; }
+  else {
+    const done = items.filter(i => i.is_done).length;
+    main.textContent = '';
+    main.append(`${faNum.format(done)}`, makeEl('small', '', `از ${faNum.format(items.length)} حرکت`));
+    bar.style.width = `${Math.round(done * 100 / items.length)}%`;
+  }
+
+  const a = state.attendance;
+  document.getElementById('dashVisitsMain').textContent = a ? `${faNum.format(a.visits_last_30_days)} بار` : '—';
+  document.getElementById('dashLastVisit').textContent = a ? (a.last_visit_at ? fmtDateTime(a.last_visit_at) : 'هنوز ورودی ثبت نشده است.') : '—';
+}
+
+function renderMembershipView() {
+  const m = state.membership;
+  renderMembershipCard('memMembership', 'memMembershipMain', 'memMembershipSub', m);
+  const list = document.getElementById('purchaseList');
+  list.replaceChildren();
+  if (!m) return;
+  if (!m.purchases.length) { list.append(makeEl('div', 'empty-note', 'هنوز سابقه‌ای برای تمدید عضویت شما ثبت نشده است.')); return; }
+  for (const p of m.purchases) {
+    const row = makeEl('div', 'list-row');
+    const left = makeEl('div');
+    left.append(makeEl('div', 'title', p.plan_name));
+    left.append(makeEl('div', 'meta', `مدت: ${faNum.format(p.duration_days)} روز`));
+    left.append(makeEl('div', 'meta', `از ${fmtDate(p.starts_at)} تا ${fmtDate(p.expires_at)}`));
+    row.append(left, makeEl('div', 'amount', fmtPrice(p.price)));
+    list.append(row);
+  }
+}
+
+function renderAttendanceView() {
+  const a = state.attendance;
+  document.getElementById('attVisits').textContent = a ? `${faNum.format(a.visits_last_30_days)} بار` : '—';
+  document.getElementById('attLast').textContent = a ? (a.last_visit_at ? fmtDateTime(a.last_visit_at) : 'ثبت نشده') : '—';
+  const list = document.getElementById('attendanceList');
+  list.replaceChildren();
+  if (!a) return;
+  if (!a.events.length) { list.append(makeEl('div', 'empty-note', 'هنوز تردد شما در باشگاه ثبت نشده است.')); return; }
+  for (const e of a.events) {
+    const isIn = e.event_type === 'in';
+    const row = makeEl('div', 'list-row');
+    const left = makeEl('div');
+    left.append(makeEl('div', 'title', fmtDate(e.checkin_at)));
+    left.append(makeEl('div', 'meta', `ساعت ${fmtTime(e.checkin_at)}`));
+    row.append(left, makeEl('span', `chip ${isIn ? 'in' : 'out'}`, isIn ? 'ورود' : 'خروج'));
+    list.append(row);
+  }
+}
+
+async function loadMembership() { state.membership = await getJson('/api/me/membership'); renderDashboard(); renderMembershipView(); }
+async function loadAttendance() { state.attendance = await getJson('/api/me/attendance'); renderDashboard(); renderAttendanceView(); }
 
 function togglePassword(inputId, btn) {
   const input = document.getElementById(inputId);
@@ -441,16 +679,12 @@ async function submitPassword(event) {
 }
 
 async function loadPlan() {
-  const res = await fetch(`${API_BASE}/api/me/workout`);
-  if (res.status === 401) {
-    showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
-    return;
-  }
-  const data = await res.json();
-  document.getElementById('updatedNote').textContent = data.updated_at
-    ? `آخرین به‌روزرسانی: ${timeAgo(data.updated_at)}`
-    : '';
+  const data = await getJson('/api/me/workout');
+  state.plan = data;
+  if (!data) return;
+  document.getElementById('updatedNote').textContent = data.updated_at ? `آخرین به‌روزرسانی: ${timeAgo(data.updated_at)}` : '';
   renderPlan(data.items);
+  renderDashboard();
 }
 
 function renderPlan(items) {
@@ -464,7 +698,7 @@ function renderPlan(items) {
       <button class="exercise-check ${item.is_done ? 'checked' : ''}" onclick="toggleItem(${item.id})">${item.is_done ? '✓' : ''}</button>
       <div>
         <div class="exercise-name ${item.is_done ? 'strike' : ''}">${escapeHtml(item.exercise_name)}</div>
-        <div class="exercise-meta">${item.sets} ست × ${escapeHtml(item.reps)} تکرار</div>
+        <div class="exercise-meta">${toFaDigits(item.sets)} ست × ${escapeHtml(toFaDigits(item.reps))} تکرار</div>
         ${item.notes ? `<div class="exercise-notes">${escapeHtml(item.notes)}</div>` : ''}
       </div>
     </div>
@@ -480,6 +714,10 @@ async function toggleItem(itemId) {
   if (!res.ok) return;
   await loadPlan();
 }
+
+window.addEventListener('hashchange', () => {
+  if (document.getElementById('appScreen').style.display !== 'none') showView(location.hash.slice(1), false);
+});
 
 loadPublicClubName();
 checkAuth();

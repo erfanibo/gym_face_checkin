@@ -131,6 +131,35 @@ class MemberProfile(BaseModel):
     has_password: bool
 
 
+class MemberPurchaseOut(BaseModel):
+    plan_name: str
+    price: int
+    duration_days: int
+    starts_at: str
+    expires_at: str
+    created_at: str
+
+
+class MemberMembershipOut(BaseModel):
+    """وضعیت عضویت و سابقهٔ تمدیدهای خودِ عضو (بخش «شهریه و عضویت» پنل عضو)."""
+    membership_expires_at: Optional[str] = None
+    status: Literal["active", "expired", "none"]  # none = تاریخ پایانی هرگز ثبت نشده
+    days_left: Optional[int] = None  # فقط وقتی status == "active"
+    last_plan_name: Optional[str] = None
+    purchases: list[MemberPurchaseOut] = []
+
+
+class MemberAttendanceEventOut(BaseModel):
+    event_type: str  # 'in' | 'out'
+    checkin_at: str
+
+
+class MemberAttendanceOut(BaseModel):
+    events: list[MemberAttendanceEventOut] = []
+    visits_last_30_days: int = 0
+    last_visit_at: Optional[str] = None  # آخرین «ورود»
+
+
 class ChangeManagerPasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1)
     new_password: str = Field(..., min_length=4, description="حداقل ۴ کاراکتر")
