@@ -42,7 +42,10 @@ CREATE TABLE IF NOT EXISTS registered_users (
     -- membership plan/extend/end endpoints in routers/users.py, as a full UTC
     -- ISO-8601 timestamp (to match the convention used everywhere else in
     -- this project, see face_engine.py).
-    membership_expires_at   TEXT
+    membership_expires_at   TEXT,
+    -- PBKDF2 hash (see auth.hash_password) of the password the MEMBER chose for the member panel.
+    -- NULL = no password set: the member panel then accepts just the phone number.
+    member_password_hash    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pending_queue (
@@ -250,6 +253,12 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE registered_users ADD COLUMN membership_expires_at TEXT")
 
 
+def _migrate_member_password(conn: sqlite3.Connection):
+    user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(registered_users)")}
+    if "member_password_hash" not in user_cols:
+        conn.execute("ALTER TABLE registered_users ADD COLUMN member_password_hash TEXT")
+
+
 def _migrate_recognition_log_nullable(conn: sqlite3.Connection):
     """
     recognition_log originally required user_id/distance (only known-member
@@ -403,6 +412,7 @@ def init_db():
         _migrate(conn)
         _migrate_recognition_log_nullable(conn)
         _migrate_registered_users_encoding_nullable(conn)
+        _migrate_member_password(conn)  # AFTER the table rebuild above, which copies a fixed column list
         _backfill_membership_codes(conn)
         _backfill_face_samples(conn)
         conn.commit()

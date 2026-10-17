@@ -1768,8 +1768,23 @@ function renderMembers() {
     <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'in')">ثبت ورود</button>
     <button class="btn-sm btn-secondary" onclick="setAttendance(${m.id}, 'out')">ثبت خروج</button>
     <button class="btn-sm btn-secondary" onclick="openEditModal(${m.id})">ویرایش</button>
+    ${m.has_member_password ? `<button class="btn-sm btn-ghost" title="اگر عضو رمز پنلش را فراموش کرد" onclick="resetMemberPassword(${m.id})">حذف رمز پنل</button>` : ''}
     <button class="btn-sm btn-ghost" onclick="deleteMember(${m.id})">حذف</button>
   `)).join('');
+}
+
+async function resetMemberPassword(id) {
+  const member = members.find(m => m.id === id);
+  if (!confirm(`رمز پنل «${member ? member.full_name : ''}» حذف شود؟ بعد از آن، عضو فقط با شماره تماس وارد می‌شود و می‌تواند رمز تازه‌ای بگذارد.`)) return;
+  const res = await fetch(`${API_BASE}/api/users/${id}/member-password`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert((err.detail && typeof err.detail === 'string') ? err.detail : 'حذف رمز انجام نشد.');
+    return;
+  }
+  if (member) member.has_member_password = false;
+  renderMembers();
+  showToast(`رمز پنل <b>${escapeText(member ? member.full_name : '')}</b> حذف شد.`);
 }
 
 /* ---- مربی: برنامه‌ی تمرینی (انتخاب عضو) ---- */
@@ -2667,6 +2682,9 @@ function connectWs() {
     } else if (msg.event === 'member_updated') {
       const member = members.find(m => m.id === msg.id);
       if (member) { member.full_name = msg.full_name; member.phone = msg.phone; renderMembers(); renderInOutList(); }
+    } else if (msg.event === 'member_password_changed') {
+      const member = members.find(m => m.id === msg.id);
+      if (member) { member.has_member_password = msg.has_member_password; renderMembers(); }
     } else if (msg.event === 'membership_updated') {
       applyMembershipUpdate(msg.last_plan_name !== undefined
         ? { id: msg.id, membership_expires_at: msg.membership_expires_at, last_plan_name: msg.last_plan_name }

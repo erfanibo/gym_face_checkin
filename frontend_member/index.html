@@ -16,6 +16,7 @@
     --muted: #8b95a7;
     --accent: #3ddc97;
     --danger: #e05656;
+    --warn: #f0b43c;
   }
   * { box-sizing: border-box; }
   body {
@@ -79,27 +80,97 @@
   .exercise-notes { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
   .empty-plan { text-align: center; color: var(--muted); padding: 70px 20px; line-height: 2; }
+
+  /* login extras */
+  label .opt { color: var(--muted); font-weight: 400; opacity: .8; }
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-inline-end: 64px; }
+  .pw-toggle {
+    position: absolute; inset-inline-end: 6px; top: 50%; transform: translateY(-50%);
+    background: transparent; border: none; color: var(--muted); font-family: inherit;
+    font-size: 12px; padding: 8px 10px; cursor: pointer; border-radius: 7px;
+  }
+  .pw-toggle:hover { color: var(--text); }
+  .login-hint { color: var(--muted); font-size: 12px; line-height: 1.8; margin: -4px 0 0; }
+  input[dir="ltr"] { text-align: right; }
+  input[dir="ltr"]::placeholder { text-align: right; }
+  .btn-primary:disabled { opacity: .55; cursor: default; }
+
+  /* header actions */
+  .header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .logout-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* security notice */
+  .notice {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px 12px;
+    background: rgba(240, 180, 60, .10); border: 1px solid rgba(240, 180, 60, .45);
+    border-radius: 12px; padding: 14px; margin-bottom: 16px;
+  }
+  .notice[hidden] { display: none; }
+  .notice svg { color: var(--warn); margin-top: 2px; }
+  .notice-text { font-size: 13px; line-height: 1.8; min-width: 0; }
+  .notice-text b { display: block; font-size: 14px; color: var(--warn); }
+  .notice-text span { display: block; color: var(--muted); font-size: 12px; }
+  .notice-btn {
+    margin-top: 10px; background: var(--warn); color: #1c1403; border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .notice-x {
+    background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1;
+    cursor: pointer; padding: 0 6px; font-family: inherit; border-radius: 6px;
+  }
+  .notice-x:hover { color: var(--text); }
+
+  /* password sheet */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .6); display: none;
+    align-items: flex-end; justify-content: center; z-index: 20;
+  }
+  .sheet-backdrop.open { display: flex; }
+  .sheet {
+    background: var(--panel); border: 1px solid var(--line); border-bottom: none;
+    border-radius: 18px 18px 0 0; width: 100%; max-width: 480px; padding: 22px 20px 28px;
+    display: flex; flex-direction: column; gap: 12px; max-height: 92vh; overflow-y: auto;
+  }
+  .sheet h2 { font-size: 16px; margin: 0; }
+  .sheet p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.9; }
+  .sheet-actions { display: flex; gap: 10px; margin-top: 4px; }
+  .sheet-actions .btn-primary { flex: 1; }
+  .btn-secondary {
+    background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 10px;
+    padding: 14px 18px; font-size: 15px; font-family: inherit; cursor: pointer;
+  }
+  .toast {
+    position: fixed; inset-inline: 16px; bottom: 20px; margin: 0 auto; max-width: 440px; z-index: 30;
+    background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
+    border-radius: 12px; padding: 13px 16px; font-size: 13px; line-height: 1.8; display: none;
+  }
+  .toast.show { display: block; }
+  @media (min-width: 520px) { .sheet-backdrop { align-items: center; } .sheet { border-radius: 18px; border-bottom: 1px solid var(--line); } }
 </style>
 </head>
 <body>
 
 <div class="screen" id="loginScreen">
   <div class="login-wrap">
-    <div class="login-card">
+    <form class="login-card" id="loginForm" onsubmit="submitLogin(event)" novalidate>
       <div class="club-name" id="loginClubName"></div>
-      <h1>برنامه‌ی تمرینی من <span>ورود با شماره تماس و کد عضویت</span></h1>
+      <h1>برنامه‌ی تمرینی من <span>با شماره‌ای که در باشگاه ثبت کرده‌ای وارد شو</span></h1>
       <div class="field">
-        <label>شماره تماس</label>
-        <input id="loginPhone" type="tel" placeholder="09xxxxxxxxx" autocomplete="tel" />
+        <label for="loginPhone">شماره تماس</label>
+        <input id="loginPhone" name="username" type="tel" inputmode="tel" dir="ltr" placeholder="09xxxxxxxxx" autocomplete="username" />
       </div>
       <div class="field">
-        <label>کد عضویت</label>
-        <input id="loginCode" type="text" inputmode="numeric" placeholder="روی رسید ثبت‌نامت نوشته شده"
-               onkeydown="if(event.key==='Enter') submitLogin()" />
+        <label for="loginPassword">رمز عبور <span class="opt">(اگر تعیین کرده‌ای)</span></label>
+        <div class="pw-wrap">
+          <input id="loginPassword" name="password" type="password" dir="ltr" autocomplete="current-password" />
+          <button type="button" class="pw-toggle" onclick="togglePassword('loginPassword', this)">نمایش</button>
+        </div>
       </div>
-      <div class="error-msg" id="loginError"></div>
-      <button class="btn-primary" onclick="submitLogin()">ورود</button>
-    </div>
+      <p class="login-hint">هنوز رمز نگذاشته‌ای؟ فقط شماره‌ات را وارد کن. بعد از ورود می‌توانی برای امنیت بیشتر رمز بگذاری.</p>
+      <div class="error-msg" id="loginError" role="alert"></div>
+      <button class="btn-primary" id="loginBtn" type="submit">ورود</button>
+    </form>
   </div>
 </div>
 
@@ -107,13 +178,56 @@
   <div class="app-header">
     <div>
       <div class="club-name" id="appClubName"></div>
-      <h1>برنامه‌ی تمرینی من</h1>
+      <h1 id="appTitle">برنامه‌ی تمرینی من</h1>
       <div class="sub" id="updatedNote"></div>
     </div>
-    <button class="logout-btn" onclick="logout()">خروج</button>
+    <div class="header-actions">
+      <button class="logout-btn" id="passwordBtn" onclick="openPasswordSheet()">رمز عبور</button>
+      <button class="logout-btn" onclick="logout()">خروج</button>
+    </div>
   </div>
+
+  <div class="notice" id="passwordNotice" hidden>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    <div class="notice-text">
+      <b>برای افزایش امنیت، رمز عبور ثبت کن</b>
+      <span>فعلاً هر کسی که شماره‌ات را بداند می‌تواند وارد برنامه‌ات شود. با رمز، ورود فقط با «شماره + رمز» ممکن است.</span>
+      <button class="notice-btn" onclick="openPasswordSheet()">تعیین رمز</button>
+    </div>
+    <button class="notice-x" aria-label="بستن هشدار" title="فعلاً نه" onclick="dismissNotice()">×</button>
+  </div>
+
   <div id="planList"></div>
 </div>
+
+<div class="sheet-backdrop" id="passwordSheet" onclick="if(event.target===this) closePasswordSheet()">
+  <form class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" onsubmit="submitPassword(event)" novalidate>
+    <h2 id="sheetTitle">تعیین رمز عبور</h2>
+    <p id="sheetHelp">از این به بعد برای ورود، شماره تماس و همین رمز را وارد می‌کنی. رمز را فراموش کردی، به مربی یا پذیرش بگو تا آن را پاک کنند.</p>
+    <div class="field" id="sheetCurrentField" style="display:none">
+      <label for="sheetCurrent">رمز فعلی</label>
+      <input id="sheetCurrent" type="password" dir="ltr" autocomplete="current-password" />
+    </div>
+    <div class="field">
+      <label for="sheetNew">رمز جدید <span class="opt">(حداقل ۶ کاراکتر)</span></label>
+      <div class="pw-wrap">
+        <input id="sheetNew" type="password" dir="ltr" autocomplete="new-password" />
+        <button type="button" class="pw-toggle" onclick="togglePassword('sheetNew', this)">نمایش</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="sheetRepeat">تکرار رمز جدید</label>
+      <input id="sheetRepeat" type="password" dir="ltr" autocomplete="new-password" />
+    </div>
+    <div class="error-msg" id="sheetError" role="alert"></div>
+    <div class="sheet-actions">
+      <button class="btn-primary" id="sheetSaveBtn" type="submit">ذخیره رمز</button>
+      <button class="btn-secondary" type="button" onclick="closePasswordSheet()">انصراف</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 const API_BASE = '';
@@ -148,6 +262,8 @@ async function loadPublicClubName() {
   } catch { /* سرور لحظه‌ای در دسترس نیست -- نام نمایش داده نمی‌شود، بقیه‌ی صفحه عادی کار می‌کند */ }
 }
 
+let profile = null;   // { full_name, has_password }
+
 async function checkAuth() {
   const res = await fetch(`${API_BASE}/api/auth/me`);
   const data = await res.json().catch(() => ({ role: null }));
@@ -167,37 +283,158 @@ function showLogin(message) {
 async function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  await loadPlan();
+  await Promise.all([loadProfile(), loadPlan()]);
 }
 
-async function submitLogin() {
+function togglePassword(inputId, btn) {
+  const input = document.getElementById(inputId);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'پنهان' : 'نمایش';
+}
+
+async function submitLogin(event) {
+  if (event) event.preventDefault();
   const errorEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
   errorEl.textContent = '';
   const phone = document.getElementById('loginPhone').value.trim();
-  const membership_code = document.getElementById('loginCode').value.trim();
+  const password = document.getElementById('loginPassword').value;
 
-  if (!phone || !membership_code) {
-    errorEl.textContent = 'شماره تماس و کد عضویت را وارد کنید.';
+  if (!phone) {
+    errorEl.textContent = 'شماره تماس را وارد کن.';
     return;
   }
 
-  const res = await fetch(`${API_BASE}/api/auth/member/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, membership_code }),
-  });
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/member/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password: password || null }),
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    errorEl.textContent = err.detail || 'شماره تماس یا کد عضویت درست نیست.';
-    return;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const detail = typeof err.detail === 'string' ? err.detail : '';
+      if (res.status === 401 && !password) {
+        errorEl.textContent = 'شماره تماس پیدا نشد؛ یا اگر رمز تعیین کرده‌ای، رمزت را هم وارد کن.';
+      } else {
+        errorEl.textContent = detail || 'ورود انجام نشد. دوباره تلاش کن.';
+      }
+      return;
+    }
+    document.getElementById('loginPassword').value = '';
+    try { sessionStorage.removeItem('pwNoticeDismissed'); } catch { /* حافظه‌ی مرورگر در دسترس نیست؛ مهم نیست */ }
+    showApp();
+  } catch {
+    errorEl.textContent = 'ارتباط با سرور برقرار نشد. مطمئن شو به وای‌فای باشگاه وصلی.';
+  } finally {
+    btn.disabled = false;
   }
-  showApp();
 }
 
 async function logout() {
   await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+  try { sessionStorage.removeItem('pwNoticeDismissed'); } catch { /* مهم نیست */ }
   window.location.reload();
+}
+
+/* ---- پروفایل، هشدار امنیتی و تعیین رمز ---- */
+async function loadProfile() {
+  const res = await fetch(`${API_BASE}/api/me/profile`);
+  if (res.status === 401) { showLogin('نشست شما منقضی شده. دوباره وارد شوید.'); return; }
+  if (!res.ok) return;
+  profile = await res.json();
+  renderProfile();
+}
+
+function noticeDismissed() {
+  try { return sessionStorage.getItem('pwNoticeDismissed') === '1'; } catch { return false; }
+}
+
+function renderProfile() {
+  if (!profile) return;
+  document.getElementById('appTitle').textContent = `سلام، ${profile.full_name}`;   // textContent: نام را مدیر وارد کرده
+  document.getElementById('passwordBtn').textContent = profile.has_password ? 'تغییر رمز' : 'رمز عبور';
+  document.getElementById('passwordNotice').hidden = profile.has_password || noticeDismissed();
+}
+
+function dismissNotice() {
+  try { sessionStorage.setItem('pwNoticeDismissed', '1'); } catch { /* فقط تا بستن همین صفحه پنهان می‌ماند */ }
+  document.getElementById('passwordNotice').hidden = true;
+}
+
+let sheetOpener = null;
+
+function openPasswordSheet() {
+  if (!profile) return;
+  sheetOpener = document.activeElement;
+  const hasPw = profile.has_password;
+  document.getElementById('sheetTitle').textContent = hasPw ? 'تغییر رمز عبور' : 'تعیین رمز عبور';
+  document.getElementById('sheetCurrentField').style.display = hasPw ? 'block' : 'none';
+  for (const id of ['sheetCurrent', 'sheetNew', 'sheetRepeat']) document.getElementById(id).value = '';
+  document.getElementById('sheetError').textContent = '';
+  document.getElementById('passwordSheet').classList.add('open');
+  document.getElementById(hasPw ? 'sheetCurrent' : 'sheetNew').focus();
+}
+
+function closePasswordSheet() {
+  document.getElementById('passwordSheet').classList.remove('open');
+  if (sheetOpener && sheetOpener.focus) sheetOpener.focus();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('passwordSheet').classList.contains('open')) closePasswordSheet();
+});
+
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4500);
+}
+
+async function submitPassword(event) {
+  event.preventDefault();
+  const errorEl = document.getElementById('sheetError');
+  const btn = document.getElementById('sheetSaveBtn');
+  errorEl.textContent = '';
+  const current = document.getElementById('sheetCurrent').value;
+  const next = document.getElementById('sheetNew').value;
+  const repeat = document.getElementById('sheetRepeat').value;
+
+  if (profile.has_password && !current) { errorEl.textContent = 'رمز فعلی را وارد کن.'; return; }
+  if (next.length < 6) { errorEl.textContent = 'رمز جدید باید حداقل ۶ کاراکتر باشد.'; return; }
+  if (!next.trim()) { errorEl.textContent = 'رمز نمی‌تواند فقط فاصله باشد.'; return; }
+  if (next !== repeat) { errorEl.textContent = 'تکرار رمز با رمز جدید یکی نیست.'; return; }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/me/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: next, current_password: profile.has_password ? current : null }),
+    });
+    if (res.status === 401 && !profile.has_password) { closePasswordSheet(); showLogin('نشست شما منقضی شده. دوباره وارد شوید.'); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorEl.textContent = typeof err.detail === 'string' ? err.detail
+        : (res.status === 422 ? 'رمز جدید باید بین ۶ تا ۱۲۸ کاراکتر باشد.' : 'ذخیره‌ی رمز انجام نشد.');
+      return;
+    }
+    const firstTime = !profile.has_password;
+    profile.has_password = true;
+    renderProfile();
+    closePasswordSheet();
+    showToast(firstTime ? 'رمز ذخیره شد. دفعه‌ی بعد با شماره و رمز وارد شو.' : 'رمز عبور عوض شد.');
+  } catch {
+    errorEl.textContent = 'ارتباط با سرور برقرار نشد.';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function loadPlan() {

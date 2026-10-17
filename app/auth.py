@@ -7,7 +7,7 @@ role):
 
   - "manager": one shared account. Full access to every endpoint (the merged
     reception+admin panel).
-  - "member":  one identity per row in registered_users, used only by the
+  - "member":  one identity per row in registered_users (phone + optional own password), used only by the
     member panel to view/act on THEIR OWN data. Can never touch another
     member's rows -- routes that use require_member get back a user_id taken
     from the signed session, never from anything the client sends.
@@ -25,6 +25,7 @@ from fastapi import HTTPException, Request
 
 from . import config
 from .database import db_cursor, get_setting, set_setting
+from .phone import members_with_phone
 
 MANAGER_PASSWORD_SETTING_KEY = "manager_password_hash"
 
@@ -78,26 +79,57 @@ def set_manager_password(new_password: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Member login (phone + membership_code -- both already exist per member,
-# no new column needed for this first version)
+# Member login: phone number, plus the member's own password IF they set one.
+#
+# The system runs on the gym's local network, so only people connected to the gym router can even
+# open the member panel. Because of that a member without a password can log in with just their
+# phone number; the panel nags them to set a password, and once one exists it is always required.
 # ---------------------------------------------------------------------------
-def find_member_for_login(phone: str, membership_code: str):
+class AmbiguousPhone(Exception):
+    """The same phone number belongs to more than one member (only possible with old data)."""
+
+
+_dummy_hash: str | None = None
+
+
+def login_member(key: str, password: str | None):
     """
-    Returns the registered_users row if phone + membership_code match an
-    existing member, else None. Both are required: membership_code alone
-    isn't a secret (an operator can see it on-screen at signup), so phone
-    acts as the second factor.
+    `key` is a phone_key(). Returns the registered_users row on success, else None.
+    A member with a password must supply it; a member without one gets in with the phone alone.
     """
-    phone = (phone or "").strip()
-    membership_code = (membership_code or "").strip()
-    if not phone or not membership_code:
-        return None
+    global _dummy_hash
     with db_cursor() as cur:
-        cur.execute(
-            "SELECT * FROM registered_users WHERE phone = ? AND membership_code = ?",
-            (phone, membership_code),
-        )
-        return cur.fetchone()
+        candidates = members_with_phone(cur, key)
+        rows = []
+        for c in candidates:
+            cur.execute("SELECT * FROM registered_users WHERE id=?", (c["id"],))
+            rows.append(cur.fetchone())
+
+    if not rows:
+        # same work as a real password check, so "no such phone" and "wrong password" look alike
+        if password:
+            if _dummy_hash is None:
+                _dummy_hash = hash_password(secrets.token_hex(8))
+            verify_password(password, _dummy_hash)
+        return None
+    if len(rows) > 1:
+        raise AmbiguousPhone()
+
+    row = rows[0]
+    stored = row["member_password_hash"]
+    if stored is None:
+        return row
+    if not password or not verify_password(password, stored):
+        return None
+    return row
+
+
+def set_member_password(user_id: int, new_password: str | None) -> bool:
+    """Sets (or, with None, removes) a member's password. False if the member does not exist."""
+    value = hash_password(new_password) if new_password is not None else None
+    with db_cursor(commit=True) as cur:
+        cur.execute("UPDATE registered_users SET member_password_hash=? WHERE id=?", (value, user_id))
+        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

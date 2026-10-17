@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import auth, config
 from ..database import db_cursor, generate_unique_membership_code
 from ..membership import apply_plan, get_active_plan
+from ..phone import ensure_phone_free as _ensure_phone_free
 from ..face_engine import add_face_sample, blob_to_encoding
 from ..models import (
     AssignPendingRequest,
@@ -122,6 +123,9 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
             f"لطفاً پروفایل موجود (شناسه {existing_id}) را ویرایش کنید نه یک ثبت‌نام جدید.",
         )
 
+    phone = payload.phone.strip() if payload.phone else None
+    _ensure_phone_free(phone)
+
     now = datetime.now(timezone.utc).isoformat()
     membership_code = generate_unique_membership_code()
     try:
@@ -133,7 +137,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
                 (
                     membership_code,
                     payload.full_name,
-                    payload.phone,
+                    phone,
                     pending_row["encoding"],
                     pending_row["photo_path"],
                     now,
@@ -165,7 +169,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
         id=new_user_id,
         membership_code=membership_code,
         full_name=payload.full_name,
-        phone=payload.phone,
+        phone=phone,
         photo_url=f"/static/pending_faces/{Path(pending_row['photo_path']).name}",
         created_at=now,
         membership_expires_at=new_expiry_iso if plan is not None else None,

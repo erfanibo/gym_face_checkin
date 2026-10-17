@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth
 from ..database import db_cursor, generate_unique_membership_code
+from ..phone import ensure_phone_free as _ensure_phone_free
 from ..membership import apply_manual_days, apply_plan, get_active_plan
 from ..models import (
     AssignPlanRequest,
@@ -25,7 +26,8 @@ router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.req
 _USER_WITH_ATTENDANCE_SELECT = """
     SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type,
            EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample,
-           (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id AND pu.plan_id IS NOT NULL ORDER BY pu.id DESC LIMIT 1) AS last_plan_name
+           (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id AND pu.plan_id IS NOT NULL ORDER BY pu.id DESC LIMIT 1) AS last_plan_name,
+           (u.member_password_hash IS NOT NULL) AS has_member_password
     FROM registered_users u
     LEFT JOIN (
         SELECT a1.user_id, a1.checkin_at, a1.event_type
@@ -52,6 +54,7 @@ def _row_to_user_out(r) -> RegisteredUserOut:
         membership_expires_at=r["membership_expires_at"],
         has_face_sample=bool(r["has_face_sample"]),
         last_plan_name=r["last_plan_name"],
+        has_member_password=bool(r["has_member_password"]),
     )
 
 
@@ -86,6 +89,7 @@ async def create_user_manual(payload: ManualRegisterRequest, request: Request):
     phone = payload.phone.strip() if payload.phone else None
     now = datetime.now(timezone.utc).isoformat()
     membership_code = generate_unique_membership_code()
+    _ensure_phone_free(phone)
 
     # اگر پلن خواسته شده، قبل از ساختن عضو چک می‌شود تا یک پلن نامعتبر عضو نیمه‌کاره نسازد.
     plan = None
@@ -220,7 +224,8 @@ async def update_user(user_id: int, payload: UpdateUserRequest, request: Request
         raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
 
     new_name = payload.full_name.strip() if payload.full_name is not None else row["full_name"]
-    new_phone = payload.phone if payload.phone is not None else row["phone"]
+    new_phone = payload.phone.strip() if payload.phone is not None else row["phone"]
+    _ensure_phone_free(new_phone, exclude_id=user_id)
 
     with db_cursor(commit=True) as cur:
         cur.execute("UPDATE registered_users SET full_name=?, phone=? WHERE id=?", (new_name, new_phone, user_id))
@@ -323,6 +328,23 @@ async def assign_plan(user_id: int, payload: AssignPlanRequest, request: Request
         cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
         updated_row = cur.fetchone()
     return _row_to_user_out(updated_row)
+
+
+@router.delete("/users/{user_id}/member-password", response_model=RegisteredUserOut)
+async def reset_member_password(user_id: int):
+    """
+    Removes the password a member chose for the member panel (they forgot it, or someone else
+    set one first). Afterwards the member logs in with just their phone number again and can
+    choose a new password. The old password cannot be read back -- it is only stored as a hash.
+    """
+    if not auth.set_member_password(user_id, None):
+        raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
+    with db_cursor() as cur:
+        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        row = cur.fetchone()
+    result = _row_to_user_out(row)
+    await manager.broadcast({"event": "member_password_changed", "id": user_id, "has_member_password": False})
+    return result
 
 
 @router.patch("/users/{user_id}/membership/end", response_model=RegisteredUserOut)

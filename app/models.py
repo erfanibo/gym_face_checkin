@@ -72,6 +72,8 @@ class RegisteredUserOut(BaseModel):
     # نام آخرین پلنی که برای این عضو ثبت شده (None = هرگز پلنی ثبت نشده، مثلاً فقط با «۱ ماهه»
     # تمدید شده). فقط یک نشانه‌ی اطلاعاتی است، نه وضعیت قطعی عضویت فعلی.
     last_plan_name: Optional[str] = None
+    # آیا عضو برای ورود به پنل عضو رمز تعیین کرده؟ (خودِ رمز/هش هرگز در پاسخ‌ها نیست)
+    has_member_password: bool = False
 
 
 class ExtendMembershipRequest(BaseModel):
@@ -107,8 +109,26 @@ class ManagerLoginRequest(BaseModel):
 
 
 class MemberLoginRequest(BaseModel):
-    phone: str = Field(..., min_length=3, description="همان شماره‌ای که هنگام ثبت‌نام ثبت شده")
-    membership_code: str = Field(..., min_length=1, description="کد عضویت (روی رسید/پیامک ثبت‌نام)")
+    phone: str = Field(..., min_length=3, max_length=40, description="همان شماره‌ای که هنگام ثبت‌نام ثبت شده")
+    # فقط اگر عضو خودش رمز تعیین کرده باشد لازم است
+    password: Optional[str] = Field(None, max_length=128, description="رمز عبور (اگر تعیین کرده)")
+
+
+class SetMemberPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=6, max_length=128, description="حداقل ۶ کاراکتر")
+    current_password: Optional[str] = Field(None, max_length=128, description="فقط هنگام «تغییر» رمزِ موجود لازم است")
+
+    @field_validator("new_password")
+    @classmethod
+    def _not_blank(cls, v):
+        if not v.strip():
+            raise ValueError("رمز نمی‌تواند فقط فاصله باشد")
+        return v
+
+
+class MemberProfile(BaseModel):
+    full_name: str
+    has_password: bool
 
 
 class ChangeManagerPasswordRequest(BaseModel):

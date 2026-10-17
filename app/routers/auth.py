@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import auth
+from .. import auth, ratelimit
+from ..phone import phone_key
 from ..models import (
     AuthIdentity,
     ChangeManagerPasswordRequest,
@@ -22,9 +23,26 @@ def manager_login(payload: ManagerLoginRequest, request: Request):
 
 @router.post("/member/login", response_model=AuthIdentity)
 def member_login(payload: MemberLoginRequest, request: Request):
-    row = auth.find_member_for_login(payload.phone, payload.membership_code)
+    """Phone number (+ the member's own password, only if they set one)."""
+    bad_login = HTTPException(401, "شماره تماس یا رمز عبور درست نیست.")
+    key = phone_key(payload.phone)
+    ip = request.client.host if request.client else "unknown"
+
+    if ratelimit.member_login_by_ip.blocked(ip) or (key and ratelimit.member_login_by_phone.blocked(key)):
+        raise HTTPException(429, ratelimit.TOO_MANY_MESSAGE)
+
+    try:
+        row = auth.login_member(key, payload.password) if key else None
+    except auth.AmbiguousPhone:
+        raise HTTPException(409, "این شماره برای بیش از یک عضو ثبت شده است؛ لطفاً به پذیرش مراجعه کنید.")
+
     if row is None:
-        raise HTTPException(401, "شماره تلفن یا کد عضویت اشتباه است")
+        ratelimit.member_login_by_ip.record(ip)
+        if key:
+            ratelimit.member_login_by_phone.record(key)
+        raise bad_login
+
+    ratelimit.member_login_by_phone.clear(key)
     request.session.clear()
     request.session["role"] = "member"
     request.session["user_id"] = row["id"]
