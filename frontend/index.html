@@ -454,7 +454,7 @@
         </svg>
         <div>
           <div class="cb-title">دوربین وصل نیست</div>
-          <div class="cb-text">سیستم بدون دوربین هم اجرا می‌شود، ولی تا وصل‌شدن دوربین، تشخیص چهره و ثبت تردد خودکار کار نمی‌کند. خودش هر چند ثانیه یک‌بار دوباره تلاش می‌کند — نیازی به ری‌استارت سرویس نیست.</div>
+          <div class="cb-text">تا زمان اتصال دوربین، ثبت تردد خودکار انجام نمی‌شود. اتصال دوباره به‌صورت خودکار بررسی می‌شود.</div>
           <div class="cb-text" id="cameraProblemHint" style="margin-top:4px; color:var(--text)"></div>
         </div>
       </div>
@@ -476,8 +476,8 @@
               <rect x="3" y="7" width="18" height="13" rx="2.2"/><path d="M7 7V5.5A1.5 1.5 0 0 1 8.5 4h7A1.5 1.5 0 0 1 17 5.5V7"/><path d="M3 11h18"/><circle cx="16.3" cy="14.5" r="1.2"/>
             </svg>
           </div>
-          <div class="nc-title">وضعیت مالی هنوز به بک‌اند وصل نشده</div>
-          <div class="nc-text">به‌محض فعال‌شدن بخش «مالی و شهریه»، خلاصه‌ی درآمد و بدهی‌های این ماه همین‌جا نمایش داده می‌شود.</div>
+          <div class="nc-title">وضعیت مالی</div>
+          <div class="nc-text">این بخش به‌زودی فعال می‌شود.</div>
         </div>
       </div>
 
@@ -501,16 +501,14 @@
         <div class="section-title">
           <h2>لاگ شناسایی (شامل چهره‌های ناشناس)</h2>
         </div>
-        <p class="block-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — بدون توجه به محدودیت ۵ دقیقه‌ای ثبت تردد، بلافاصله یک خط ثبت می‌شود.</p>
-        <div id="recognitionLogList" class="feed-list"></div>
+                <div id="recognitionLogList" class="feed-list"></div>
         <div id="recognitionLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
       </div>
 
       <!-- ============ پذیرش: ورود/خروج اعضا ============ -->
       <div class="page" data-page="reception-inout" style="--acc:var(--c-reception)">
         <div class="section-title"><h2>ثبت دستی ورود / خروج</h2></div>
-        <p class="block-hint">برای زمانی که تشخیص چهره موجود نیست یا عضو بدون عبور از دوربین وارد/خارج می‌شود.</p>
-        <div class="search-box">
+                <div class="search-box">
           <input id="inoutSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderInOutList()" />
         </div>
         <div id="inoutList" class="member-list"></div>
@@ -525,12 +523,12 @@
               <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
             </svg>
           </div>
-          <div class="nc-title">تنظیمات دوربین هنوز از پنل قابل تغییر نیست</div>
-          <div class="nc-text">فعلاً ایندکس دوربین از متغیر محیطی <code>CAMERA_INDEX</code> روی سرور خوانده می‌شود. وصل‌کردن این فرم به بک‌اند، گام بعدی است.</div>
+          <div class="nc-title">تنظیمات دوربین</div>
+          <div class="nc-text">تغییر دوربین از این بخش هنوز امکان‌پذیر نیست.</div>
         </div>
         <div class="divider"></div>
         <div class="form-grid">
-          <div class="field"><label>دوربین فعال</label><select disabled><option>دوربین پیش‌فرض سرور (CAMERA_INDEX=0)</option></select></div>
+          <div class="field"><label>دوربین فعال</label><select disabled><option>دوربین پیش‌فرض</option></select></div>
           <div class="field"><label>کیفیت تصویر</label><select disabled><option>استاندارد</option></select></div>
         </div>
         <div class="modal-actions" style="margin-top:18px; max-width:220px;">
@@ -540,12 +538,11 @@
 
       <!-- ============ پذیرش > تنظیمات پذیرش: رفتار ثبت تردد ============ -->
       <div class="page" data-page="reception-settings-behavior" style="--acc:var(--c-reception)">
-        <p class="block-hint">این مقادیر مستقیماً روی موتور تشخیص چهره اثر می‌گذارند و بلافاصله بعد از ذخیره فعال می‌شوند (بدون نیاز به ری‌استارت سرویس).</p>
-        <div class="form-grid">
-          <div class="field"><label>فاصله‌ی ثبت ورود/خروج یکسان (دقیقه)</label><input id="behAttendanceCooldown" type="number" min="1" max="120" /></div>
-          <div class="field"><label>دیبانس لاگ شناسایی (ثانیه)</label><input id="behRecognitionDebounce" type="number" min="1" max="60" /></div>
-          <div class="field"><label>پنجره‌ی آنتی‌اسپم صف انتظار (دقیقه)</label><input id="behPendingDedupWindow" type="number" min="1" max="60" /></div>
-          <div class="field"><label>حداکثر نمونه‌ی چهره به ازای هر عضو</label><input id="behMaxFaceSamples" type="number" min="1" max="100" /></div>
+                <div class="form-grid">
+          <div class="field"><label>حداقل فاصله بین دو ثبت تردد یک نفر (دقیقه)</label><input id="behAttendanceCooldown" type="number" min="1" max="120" /></div>
+          <div class="field"><label>فاصله ثبت شناسایی در لاگ (ثانیه)</label><input id="behRecognitionDebounce" type="number" min="1" max="60" /></div>
+          <div class="field"><label>مدت نادیده گرفتن چهره‌ی تکراری در صف انتظار (دقیقه)</label><input id="behPendingDedupWindow" type="number" min="1" max="60" /></div>
+          <div class="field"><label>حداکثر تعداد عکس چهره برای هر عضو</label><input id="behMaxFaceSamples" type="number" min="1" max="100" /></div>
         </div>
         <div class="error-msg" id="behaviorSettingsError"></div>
         <div class="modal-actions" style="margin-top:18px; max-width:220px;">
@@ -555,8 +552,7 @@
 
       <!-- ============ پذیرش > تنظیمات پذیرش: اعلان‌ها ============ -->
       <div class="page" data-page="reception-settings-alerts" style="--acc:var(--c-reception)">
-        <p class="block-hint">این سوییچ‌ها فعلاً فقط نمایشی‌اند و به هیچ سرویس پیامکی/ایمیلی وصل نیستند.</p>
-        <div class="switch-row">
+                <div class="switch-row">
           <div><div class="label-main">اعلان ورود/خروج اعضا</div><div class="label-sub">هر بار عضوی تردد کند</div></div>
           <label class="switch"><input type="checkbox" checked /><span class="track"></span><span class="thumb"></span></label>
         </div>
@@ -602,14 +598,13 @@
         </div>
 
         <div class="divider"></div>
-        <p class="block-hint">اگر همین الان کنار دستگاه هستید و شخص حاضر است، ثبت‌نام از طریق چهره بهتر است — چون چهره‌اش از همان ابتدا برای تشخیص بعدی ذخیره می‌شود و این مرحله‌ی اضافه لازم نیست.</p>
-        <button class="btn-secondary btn-sm" onclick="goToPage('reception-queue')">برو به صف پذیرش</button>
+        <p class="block-hint">در صورت حضور فرد کنار دستگاه، ثبت‌نام از طریق چهره توصیه می‌شود.</p>
+        <button class="btn-secondary btn-sm" onclick="goToPage('reception-queue')">صف پذیرش</button>
       </div>
 
       <!-- ============ اعضا: تمدید/پایان عضویت ============ -->
       <div class="page" data-page="members-renew" style="--acc:var(--c-members)">
-        <p class="block-hint">عضو را انتخاب کنید تا تاریخ پایان فعلی عضویتش را ببینید و آن را تمدید یا پایان دهید.</p>
-        <div class="field" style="max-width:360px;">
+                <div class="field" style="max-width:360px;">
           <label>انتخاب عضو</label>
           <select id="renewMemberSelect" onchange="renderRenewPanel()"><option value="">— انتخاب کنید —</option></select>
         </div>
@@ -622,7 +617,6 @@
           </div>
 
           <div class="section-title" style="margin-top:20px;"><h2>تمدید با تعرفه</h2></div>
-          <p class="nc-text" style="margin-bottom:10px;">تعداد روزِ تعرفه به تاریخ پایان فعلی اضافه می‌شود (اگر هنوز اعتبار دارد از همان تاریخ، وگرنه از امروز) و در سابقه‌ی خرید عضو ثبت می‌شود.</p>
           <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; max-width:520px;">
             <div class="field" style="flex:1; min-width:220px;"><select id="renewPlanSelect" onchange="updateRenewPlanPreview()"></select></div>
             <button class="btn-primary" id="renewPlanBtn" onclick="assignPlanToSelectedMember()">تمدید با این تعرفه</button>
@@ -634,8 +628,7 @@
           </div>
 
           <details id="manualExtendBox" style="margin-top:20px; max-width:520px;">
-            <summary class="member-meta" style="cursor:pointer;">تمدید دستی (بدون تعرفه) — هدیه، جبران یا اصلاح</summary>
-            <p class="nc-text" style="margin:10px 0;">چند روز را بدون قیمت و بدون تعرفه اضافه می‌کند (در سابقه به‌عنوان «تمدید دستی» با قیمت ۰ ثبت می‌شود). برای تمدیدهای معمول از «تمدید با تعرفه» استفاده کنید.</p>
+            <summary class="member-meta" style="cursor:pointer;">تمدید دستی (بدون تعرفه)</summary>
             <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
               <div class="field" style="width:140px;">
                 <label>تعداد روز</label>
@@ -647,7 +640,6 @@
           </details>
 
           <div class="section-title" style="margin-top:20px;"><h2>پایان عضویت</h2></div>
-          <p class="nc-text" style="margin-bottom:10px;">عضویت همین الان پایان می‌یابد (قابل بازگشت با تمدید دوباره). ورود عضو به باشگاه مسدود نمی‌شود، فقط به‌صورت منقضی علامت‌گذاری می‌شود.</p>
           <button class="btn-sm btn-ghost" onclick="endMembershipNow()">پایان عضویت</button>
         </div>
       </div>
@@ -707,8 +699,7 @@
           <h2>انتخاب عضو برای برنامه‌ی تمرینی</h2>
           <span class="count-badge" id="coachWorkoutCount">0</span>
         </div>
-        <p class="block-hint">عضو مورد نظر را جستجو کنید و روی «تعریف / ویرایش برنامه» بزنید.</p>
-        <div class="search-box">
+                <div class="search-box">
           <input id="coachWorkoutSearch" type="text" placeholder="جستجو بر اساس نام، تلفن یا کد عضویت..." oninput="renderCoachWorkoutList()" />
         </div>
         <div id="coachWorkoutList" class="member-list"></div>
@@ -721,8 +712,7 @@
           <h2>پلن‌های عضویت</h2>
           <button class="btn-primary btn-sm" style="margin-right:auto;" onclick="openPlanModal()">+ افزودن تعرفه‌ی جدید</button>
         </div>
-        <p class="block-hint">هر تعرفه یک‌بار اینجا تعریف می‌شود (نام، قیمت، تعداد روز). بعد هنگام ثبت‌نام یا تمدید هر عضو می‌توانید یکی از این تعرفه‌ها را برایش ثبت کنید؛ تعداد روز تعرفه به تاریخ پایان عضویتش اضافه می‌شود.</p>
-        <div class="data-table-wrap">
+                <div class="data-table-wrap">
           <table class="data-table">
             <thead><tr><th>نام پلن</th><th>مدت</th><th>قیمت</th><th>تعداد عضو فعال</th><th></th></tr></thead>
             <tbody id="plansTableBody"><tr class="table-empty-row"><td colspan="5">در حال بارگذاری…</td></tr></tbody>
@@ -740,7 +730,7 @@
         <div class="data-table-wrap">
           <table class="data-table">
             <thead><tr><th>عضو</th><th>مبلغ</th><th>تاریخ</th><th>روش پرداخت</th></tr></thead>
-            <tbody><tr class="table-empty-row"><td colspan="4">هیچ پرداختی ثبت نشده — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+            <tbody><tr class="table-empty-row"><td colspan="4">پرداختی ثبت نشده است.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -751,7 +741,7 @@
         <div class="data-table-wrap">
           <table class="data-table">
             <thead><tr><th>عضو</th><th>مبلغ بدهی</th><th>از تاریخ</th></tr></thead>
-            <tbody><tr class="table-empty-row"><td colspan="3">بدهی ثبت‌شده‌ای وجود ندارد — این بخش به بک‌اند وصل نیست.</td></tr></tbody>
+            <tbody><tr class="table-empty-row"><td colspan="3">بدهی ثبت‌شده‌ای وجود ندارد.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -765,8 +755,8 @@
               <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
             </svg>
           </div>
-          <div class="nc-title">تاریخچه‌ی تراکنش‌ها هنوز ثبت نمی‌شود</div>
-          <div class="nc-text">وقتی پرداخت‌ها و بدهی‌ها به بک‌اند وصل شوند، تایم‌لاین کامل تراکنش‌های هر عضو اینجا نمایش داده می‌شود.</div>
+          <div class="nc-title">تاریخچه‌ی تراکنش‌ها</div>
+          <div class="nc-text">این بخش به‌زودی فعال می‌شود.</div>
         </div>
       </div>
 
@@ -778,8 +768,8 @@
               <rect x="4" y="11" width="3.4" height="9" rx="1"/><rect x="10.3" y="5" width="3.4" height="15" rx="1"/><rect x="16.6" y="14" width="3.4" height="6" rx="1"/>
             </svg>
           </div>
-          <div class="nc-title">گزارش مالی هنوز داده‌ای ندارد</div>
-          <div class="nc-text">این گزارش به داده‌ی پرداخت‌ها و بدهی‌ها نیاز دارد که هنوز در دیتابیس وجود ندارد.</div>
+          <div class="nc-title">گزارش مالی</div>
+          <div class="nc-text">این بخش به‌زودی فعال می‌شود.</div>
         </div>
       </div>
 
@@ -792,8 +782,7 @@
             <button class="btn-secondary btn-sm" onclick="window.print()">چاپ / PDF</button>
           </div>
         </div>
-        <p class="block-hint">بر اساس لاگ شناسایی زنده؛ فقط ترددهای همین جلسه و امروز را شامل می‌شود.</p>
-        <div class="data-table-wrap">
+                <div class="data-table-wrap">
           <table class="data-table">
             <thead><tr><th>عضو</th><th>زمان شناسایی</th></tr></thead>
             <tbody id="attendanceReportBody"></tbody>
@@ -804,8 +793,7 @@
       <!-- ============ گزارش‌ها: خروجی PDF/اکسل (هاب) ============ -->
       <div class="page" data-page="reports-export" style="--acc:var(--c-reports)">
         <div class="section-title"><h2>خروجی گزارش‌ها</h2></div>
-        <p class="block-hint">این خروجی‌ها کاملاً در مرورگر تولید می‌شوند (بدون نیاز به سرور).</p>
-        <div class="member-row" style="justify-content:space-between;">
+                <div class="member-row" style="justify-content:space-between;">
           <div class="member-info"><div class="member-name">گزارش اعضا</div><div class="member-meta">لیست کامل اعضا با وضعیت تردد</div></div>
           <div class="member-actions">
             <button class="btn-secondary btn-sm" onclick="exportMembersCsv()">اکسل</button>
@@ -848,10 +836,9 @@
           <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>افزودن کاربر جدید</button>
         </div>
         <div class="member-row" style="margin-bottom:22px;">
-          <div class="member-info"><div class="member-name">مدیر</div><div class="member-meta">دسترسی کامل — تنها حساب فعال این سیستم</div></div>
+          <div class="member-info"><div class="member-name">مدیر</div><div class="member-meta">دسترسی کامل</div></div>
           <span class="member-status status-in">فعال</span>
         </div>
-        <p class="block-hint">چند-کاربری (مثلاً حساب جدا برای مربی) هنوز پیاده نشده؛ فعلاً یک رمز مشترک برای کل پنل وجود دارد.</p>
 
         <div class="divider"></div>
         <div class="section-title"><h2>تغییر رمز عبور من</h2></div>
@@ -870,18 +857,17 @@
       <!-- ============ تنظیمات: لاگ سیستم ============ -->
       <div class="page" data-page="settings-log" style="--acc:var(--c-settings)">
         <div class="section-title"><h2>لاگ شناسایی (سیستم)</h2></div>
-        <p class="block-hint">هر بار دوربین چهره‌ای را ببیند — شناخته‌شده یا ناشناس — یک خط اینجا ثبت می‌شود. همین داده در صفحه‌ی «ثبت تردد» زیر پذیرش هم نشان داده می‌شود.</p>
-        <div id="settingsLogList" class="feed-list"></div>
+                <div id="settingsLogList" class="feed-list"></div>
         <div id="settingsLogEmpty" class="empty" style="display:none">هنوز چیزی ثبت نشده.</div>
       </div>
 
       <!-- ============ تنظیمات: پشتیبان‌گیری ============ -->
       <div class="page" data-page="settings-backup" style="--acc:var(--c-settings)">
         <div class="section-title"><h2>پشتیبان‌گیری و بازیابی</h2></div>
-        <p class="block-hint">یک بک‌آپ شامل دیتابیس کامل (اعضا، تردد، لاگ) و عکس‌هاست. پیشنهاد می‌شود مرتب یک نسخه دانلود و جای امنی نگه‌داری شود.</p>
+        <p class="block-hint">فایل پشتیبان شامل اطلاعات اعضا، ترددها و عکس‌هاست. پیشنهاد می‌شود به‌صورت منظم دانلود و نگهداری شود.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="btn-primary" onclick="downloadBackup()">دانلود بک‌آپ</button>
-          <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">افزودن بک‌آپ (بازیابی)</button>
+          <button class="btn-primary" onclick="downloadBackup()">دانلود فایل پشتیبان</button>
+          <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">بازیابی از فایل پشتیبان</button>
           <input type="file" id="restoreFileInput" accept=".zip" style="display:none" onchange="restoreBackup(event)" />
         </div>
         <div class="error-msg" id="restoreStatusMsg"></div>
@@ -896,14 +882,14 @@
           </div>
           <span class="member-status status-none" id="updateStatusBadge">بررسی نشده</span>
         </div>
-        <p class="block-hint" id="updateMessage">برای دیدن آخرین نسخه‌ی منتشرشده، دکمه‌ی زیر را بزنید. این کار فقط یک درخواست به GitHub می‌فرستد و هیچ چیزی روی سیستم تغییر نمی‌کند؛ نصب نسخه‌ی جدید همچنان دستی است.</p>
+        <p class="block-hint" id="updateMessage">برای بررسی نسخه‌ی جدید، دکمه‌ی زیر را بزنید.</p>
         <button class="btn-secondary" id="updateCheckBtn" onclick="checkForUpdate()">بررسی به‌روزرسانی</button>
         <div id="updateResult" style="margin-top:18px;"></div>
       </div>
 
       <!-- ============ تنظیمات: اطلاعات باشگاه ============ -->
       <div class="page" data-page="settings-info" style="--acc:var(--c-settings)">
-        <p class="block-hint">نام باشگاه همه‌جا نمایش داده می‌شود: عنوان تب مرورگر، صفحه‌ی ورود و نوار کناری این پنل، و صفحه‌ی ورود و هدر پنل اعضا. شماره تماس و آدرس فقط برای مرجع خودِ شماست و فقط داخل همین پنل دیده می‌شود.</p>
+        <p class="block-hint">نام باشگاه در پنل مدیریت و پنل کاربری نمایش داده می‌شود.</p>
         <div class="form-grid">
           <div class="field"><label>نام باشگاه</label><input id="clubInfoName" type="text" maxlength="80" /></div>
           <div class="field"><label>شماره تماس</label><input id="clubInfoPhone" type="tel" placeholder="021xxxxxxx" /></div>
@@ -1346,10 +1332,10 @@ async function loadCameraStatus() {
 }
 
 const CAMERA_PROBLEM_HINTS = {
-  device_missing: 'علت: دستگاه دوربین داخل سرویس دیده نمی‌شود. اگر سرویس با Docker اجرا شده، آن را با فایل docker-compose.camera.yml بالا بیاورید (راهنما در README).',
-  no_permission: 'علت: سرویس اجازهٔ خواندن دستگاه دوربین را ندارد؛ دسترسی (گروه video) را بررسی کنید.',
-  open_failed: 'علت: دوربین باز نشد. ممکن است برنامهٔ دیگری از آن استفاده کند یا شمارهٔ دوربین (CAMERA_INDEX) درست نباشد.',
-  no_frames: 'علت: دوربین باز شد ولی تصویر نمی‌دهد. برنامه‌های دیگری که از دوربین استفاده می‌کنند (مثل ffplay یا تب مرورگر) را ببندید؛ در صورت ادامه، CAMERA_FOURCC=MJPG را امتحان کنید.',
+  device_missing: 'دوربین شناسایی نشد. اتصال کابل دوربین را بررسی کنید یا با پشتیبان فنی تماس بگیرید.',
+  no_permission: 'دسترسی به دوربین امکان‌پذیر نیست. با پشتیبان فنی تماس بگیرید.',
+  open_failed: 'دوربین باز نشد. اگر برنامه‌ی دیگری از دوربین استفاده می‌کند آن را ببندید، در غیر این صورت با پشتیبان فنی تماس بگیرید.',
+  no_frames: 'دوربین تصویر ارسال نمی‌کند. برنامه‌های دیگری که از دوربین استفاده می‌کنند را ببندید؛ در صورت ادامه با پشتیبان فنی تماس بگیرید.',
 };
 
 function updateCameraBanner() {
@@ -1513,7 +1499,7 @@ async function loadMembers() {
 async function deleteMember(id) {
   const member = members.find(m => m.id === id);
   const name = member ? member.full_name : 'این عضو';
-  if (!confirm(`آیا از حذف «${name}» مطمئن هستید؟ این کار قابل بازگشت نیست و تاریخچه‌ی تردد او هم حذف می‌شود.`)) return;
+  if (!confirm(`«${name}» حذف شود؟ این کار قابل بازگشت نیست.`)) return;
   const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
   if (!res.ok) { alert('حذف انجام نشد. دوباره تلاش کنید.'); return; }
   members = members.filter(m => m.id !== id);
@@ -1608,7 +1594,7 @@ async function submitManualRegistration() {
     document.getElementById('manualAddFullName').value = '';
     document.getElementById('manualAddPhone').value = '';
     document.getElementById('manualAddPlan').value = '';
-    showToast(`عضو <b>${escapeText(result.full_name)}</b> ثبت شد — کد عضویت: <b>${result.membership_code}</b>. چهره‌اش هنوز ثبت نشده؛ هروقت دوربین او را دید، از صف پذیرش به او وصلش کنید.`);
+    showToast(`عضو <b>${escapeText(result.full_name)}</b> ثبت شد.`);
   } finally {
     btn.disabled = false;
   }
@@ -1983,7 +1969,7 @@ async function saveBehaviorSettings() {
     errorEl.textContent = (err.detail && typeof err.detail === 'string') ? err.detail : 'ذخیره‌ی تنظیمات انجام نشد.';
     return;
   }
-  showToast('تنظیمات رفتار ثبت تردد ذخیره شد و بلافاصله فعال شد.');
+  showToast('تنظیمات ذخیره شد.');
 }
 
 /* ---- تنظیمات: به‌روزرسانی سیستم (نمایش نسخه + بررسی نسخه‌ی جدید) ----
@@ -1994,21 +1980,21 @@ const UPDATE_STATUS_UI = {
   up_to_date:       { badge: 'به‌روز است',               cls: 'status-in' },
   update_available: { badge: 'نسخه‌ی جدید موجود است',    cls: 'status-expiring' },
   unknown:          { badge: 'نامشخص',                   cls: 'status-none' },
-  not_found:        { badge: 'Release پیدا نشد',          cls: 'status-none' },
-  rate_limited:     { badge: 'محدودیت GitHub',            cls: 'status-none' },
+  not_found:        { badge: 'نسخه‌ای یافت نشد',         cls: 'status-none' },
+  rate_limited:     { badge: 'محدودیت موقت',             cls: 'status-none' },
   unreachable:      { badge: 'عدم اتصال',                 cls: 'status-out' },
   disabled:         { badge: 'غیرفعال',                   cls: 'status-none' },
 };
 
 function updateMessageFor(r) {
   switch (r.status) {
-    case 'up_to_date': return `شما از آخرین نسخه‌ی منتشرشده (${r.latest_version}) استفاده می‌کنید.`;
-    case 'update_available': return `نسخه‌ی ${r.latest_version} منتشر شده است؛ نسخه‌ی شما ${r.current_version} است.`;
-    case 'unknown': return `آخرین نسخه‌ی منتشرشده «${r.latest_version}» است، اما مقایسه‌ی خودکار با نسخه‌ی شما (${r.current_version}) ممکن نشد.`;
-    case 'not_found': return 'هنوز هیچ نسخه‌ای (Release) منتشر نشده یا مخزن خصوصی است؛ بنابراین نسخه‌ی جدیدی قابل تشخیص نیست.';
-    case 'rate_limited': return 'GitHub موقتاً درخواست بیشتری نمی‌پذیرد. کمی بعد دوباره امتحان کنید.';
-    case 'unreachable': return 'اتصال به GitHub برقرار نشد. اینترنت سرور را بررسی کنید و دوباره امتحان کنید.';
-    case 'disabled': return 'بررسی به‌روزرسانی در این نصب غیرفعال است (متغیر محیطی UPDATE_CHECK_REPO خالی یا نامعتبر است).';
+    case 'up_to_date': return `نسخه‌ی شما (${r.latest_version}) به‌روز است.`;
+    case 'update_available': return `نسخه‌ی جدید ${r.latest_version} موجود است. نسخه‌ی شما ${r.current_version} است.`;
+    case 'unknown': return `آخرین نسخه ${r.latest_version} است؛ مقایسه با نسخه‌ی شما (${r.current_version}) انجام نشد.`;
+    case 'not_found': return 'نسخه‌ی جدیدی یافت نشد.';
+    case 'rate_limited': return 'بررسی موقتاً امکان‌پذیر نیست. کمی بعد دوباره امتحان کنید.';
+    case 'unreachable': return 'اتصال برقرار نشد. اینترنت را بررسی کنید و دوباره امتحان کنید.';
+    case 'disabled': return 'بررسی به‌روزرسانی در این نسخه فعال نیست.';
     default: return '';
   }
 }
@@ -2051,7 +2037,7 @@ function renderUpdateResult(r) {
   }
   if (r.release_notes) card.append(makeEl('pre', { className: 'update-notes', textContent: r.release_notes }));
   if (r.release_url) {
-    const link = makeEl('a', { href: r.release_url, target: '_blank', rel: 'noopener noreferrer', textContent: 'مشاهده‌ی این نسخه در GitHub' });
+    const link = makeEl('a', { href: r.release_url, target: '_blank', rel: 'noopener noreferrer', textContent: 'جزئیات این نسخه' });
     link.style.cssText = 'display:inline-block; margin-bottom:14px; color:var(--accent);';
     card.append(link);
   }
@@ -2059,17 +2045,10 @@ function renderUpdateResult(r) {
   const backupBtn = makeEl('button', { className: 'linklike', type: 'button', textContent: 'تنظیمات > پشتیبان‌گیری' });
   backupBtn.addEventListener('click', () => goToPage('settings-backup'));
   const steps = makeEl('ol', { className: 'update-steps' },
-    makeEl('li', {}, 'قبل از هر چیز از «', backupBtn, '» یک بکاپ بگیرید و فایلش را جای امنی نگه دارید.'),
-    makeEl('li', {}, 'روی سرور، داخل پوشه‌ی پروژه این دو دستور را اجرا کنید:',
-      makeEl('div', { className: 'code-block', textContent: 'git pull\ndocker compose up --build -d' })),
-    makeEl('li', { textContent: 'چند دقیقه صبر کنید (ساخت دوباره‌ی ایمیج زمان‌بر است و پذیرش در این مدت در دسترس نیست)، بعد همین صفحه را رفرش کنید.' }),
+    makeEl('li', {}, 'ابتدا از بخش «', backupBtn, '» فایل پشتیبان تهیه کنید.'),
+    makeEl('li', { textContent: 'نصب نسخه‌ی جدید را به پشتیبان فنی سیستم بسپارید.' }),
   );
   card.append(steps);
-  card.append(makeEl('p', {
-    className: 'block-hint',
-    style: 'margin:12px 0 0;',
-    textContent: 'اگر دوربین را با docker-compose.camera.yml وصل کرده‌اید، همان دستور همیشگی خودتان (با همان فایل) را اجرا کنید. اطلاعات و عکس‌ها در پوشه‌ی data می‌مانند. جزئیات کامل در بخش «به‌روزرسانی» فایل README است.',
-  }));
   box.append(card);
 }
 
@@ -2203,7 +2182,7 @@ async function submitPlan() {
 
 async function deletePlan(id) {
   const plan = plans.find(p => p.id === id);
-  if (!confirm(`تعرفه‌ی «${plan ? plan.name : ''}» حذف شود؟ عضوهایی که قبلاً این تعرفه را گرفته‌اند تغییری نمی‌کنند؛ فقط دیگر برای ثبت جدید قابل انتخاب نیست.`)) return;
+  if (!confirm(`تعرفه‌ی «${plan ? plan.name : ''}» حذف شود؟`)) return;
   const res = await fetch(`${API_BASE}/api/plans/${id}`, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -2487,7 +2466,7 @@ async function submitRegistration() {
   pendingItems.delete(activePendingId);
   renderQueue();
   closeModal();
-  showToast(`ثبت‌نام <b>${escapeText(result.full_name)}</b> با موفقیت انجام شد — کد عضویت: <b>${result.membership_code}</b>` +
+  showToast(`ثبت‌نام <b>${escapeText(result.full_name)}</b> انجام شد` +
     (result.last_plan_name ? ` — تعرفه: <b>${escapeText(result.last_plan_name)}</b>` : ''));
 }
 
@@ -2553,7 +2532,7 @@ async function submitAssign(userId) {
   pendingItems.delete(activeAssignPendingId);
   renderQueue();
   closeAssignModal();
-  showToast(`این چهره به‌عنوان نمونهٔ جدید <b>${result.full_name}</b> ثبت شد (${result.sample_count} نمونه تاکنون).`);
+  showToast(`چهره‌ی جدید برای <b>${escapeText(result.full_name)}</b> ثبت شد.`);
 }
 
 /* ============================================================ */
@@ -2616,12 +2595,12 @@ async function restoreBackup(event) {
   statusEl.textContent = '';
 
   const confirmed = confirm(
-    'این کار تمام اعضا، تردد، لاگ و عکس‌های فعلی را با محتوای این فایل بک‌آپ جایگزین می‌کند و قابل بازگشت نیست (به‌جز یک نسخهٔ امن از دیتابیس فعلی که سرور خودکار نگه می‌دارد). ادامه می‌دهید؟'
+    'اطلاعات فعلی با محتوای این فایل جایگزین می‌شود و قابل بازگشت نیست. ادامه می‌دهید؟'
   );
   if (!confirmed) { input.value = ''; return; }
 
   statusEl.style.color = 'var(--muted)';
-  statusEl.textContent = 'در حال بازیابی... لطفاً صبر کنید و صفحه را نبندید.';
+  statusEl.textContent = 'در حال بازیابی، لطفاً صبر کنید…';
   restoringNow = true;
 
   const formData = new FormData();
@@ -2641,7 +2620,7 @@ async function restoreBackup(event) {
   } catch (e) {
     restoringNow = false;
     statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = 'ارتباط با سرور برقرار نشد. دوباره تلاش کنید.';
+    statusEl.textContent = 'ارتباط برقرار نشد. دوباره تلاش کنید.';
   } finally {
     input.value = '';
   }
@@ -2708,7 +2687,7 @@ function connectWs() {
       updateCameraBanner();
     } else if (msg.event === 'backup_restored') {
       if (restoringNow) return;
-      alert('یک بازیابی بک‌آپ روی سرور انجام شد. صفحه رفرش می‌شود.');
+      alert('اطلاعات بازیابی شد. صفحه دوباره بارگذاری می‌شود.');
       window.location.reload();
     }
   };
