@@ -389,6 +389,7 @@ async function checkAuth() {
 }
 
 function showLogin(message) {
+  stopLiveUpdates();
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'block';
   document.getElementById('loginError').textContent = message || '';
@@ -409,7 +410,72 @@ async function showApp() {
   document.getElementById('appScreen').style.display = 'block';
   showView(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard', false);
   await Promise.all([loadProfile(), loadPlan(), loadMembership(), loadAttendance()]);
+  startLiveUpdates();
 }
+
+/* ---- به‌روزرسانی خودکار ----
+   اتصال زنده (WebSocket) به‌محض تغییر اطلاعات پیام «بازخوانی» می‌فرستد؛ هیچ اطلاعاتی در پیام نیست و
+   داده از مسیرهای معمول /api/me/* دوباره خوانده می‌شود. اگر اتصال زنده برقرار نباشد (مثلاً پشت برخی
+   شبکه‌ها)، هر ۳۰ ثانیه و هنگام بازگشت به صفحه، اطلاعات از نو خوانده می‌شود. */
+const REFRESHERS = {
+  attendance: () => loadAttendance(),
+  membership: () => loadMembership(),
+  profile:    () => Promise.all([loadProfile(), loadMembership()]),
+  workout:    () => loadPlan(),
+  all:        () => Promise.all([loadPublicClubName(), loadProfile(), loadPlan(), loadMembership(), loadAttendance()]),
+};
+const live = { ws: null, retry: 0, reconnectTimer: null, pollTimer: null, pending: new Set(), flushTimer: null, active: false };
+
+function appVisible() { return document.getElementById('appScreen').style.display !== 'none'; }
+
+function queueRefresh(scope) {
+  live.pending.add(REFRESHERS[scope] ? scope : 'all');
+  if (live.flushTimer) return;
+  live.flushTimer = setTimeout(async () => {
+    const scopes = live.pending.has('all') ? ['all'] : [...live.pending];
+    live.pending.clear(); live.flushTimer = null;
+    if (!appVisible() || document.hidden) return;
+    try { await Promise.all(scopes.map(sc => REFRESHERS[sc]())); } catch { /* تلاش بعدی خودکار است */ }
+  }, 300);
+}
+
+function connectLive() {
+  if (!live.active || live.ws) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  let ws;
+  try { ws = new WebSocket(`${proto}://${location.host}/ws/member`); } catch { return; }
+  live.ws = ws;
+  ws.onopen = () => { live.retry = 0; queueRefresh('all'); };   // رویدادهای ازدست‌رفته را جبران می‌کند
+  ws.onmessage = (event) => {
+    let msg; try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg && msg.event === 'refresh') queueRefresh(msg.scope);
+  };
+  ws.onerror = () => { try { ws.close(); } catch { /* مهم نیست */ } };
+  ws.onclose = (event) => {
+    live.ws = null;
+    if (!live.active || event.code === 4401 || event.code === 4429) return;
+    const delay = Math.min(30000, 2000 * 2 ** Math.min(live.retry++, 4));
+    live.reconnectTimer = setTimeout(connectLive, delay);
+  };
+}
+
+function startLiveUpdates() {
+  if (live.active) return;
+  live.active = true;
+  connectLive();
+  live.pollTimer = setInterval(() => { if (!document.hidden && appVisible()) queueRefresh('all'); }, 30000);
+}
+
+function stopLiveUpdates() {
+  live.active = false;
+  clearTimeout(live.reconnectTimer); clearInterval(live.pollTimer); clearTimeout(live.flushTimer);
+  live.reconnectTimer = live.pollTimer = live.flushTimer = null;
+  live.pending.clear();
+  if (live.ws) { const ws = live.ws; live.ws = null; ws.onclose = null; try { ws.close(); } catch { /* مهم نیست */ } }
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && appVisible()) queueRefresh('all'); });
+window.addEventListener('online', () => { if (appVisible()) { connectLive(); queueRefresh('all'); } });
 
 function showView(name, scroll = true) {
   if (!VIEWS.includes(name)) name = 'dashboard';

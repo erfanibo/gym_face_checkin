@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import auth
+from ..ws_manager import manager
 from ..database import db_cursor
 from ..models import SaveWorkoutPlanRequest, WorkoutItemOut, WorkoutPlanOut
 
@@ -65,7 +66,7 @@ def get_member_workout(user_id: int):
     response_model=WorkoutPlanOut,
     dependencies=[Depends(auth.require_manager)],
 )
-def save_member_workout(user_id: int, payload: SaveWorkoutPlanRequest):
+async def save_member_workout(user_id: int, payload: SaveWorkoutPlanRequest):
     """
     Replaces this member's ENTIRE plan with the given list, in the given
     order. There's no per-item add/remove/reorder endpoint on purpose -- the
@@ -87,6 +88,7 @@ def save_member_workout(user_id: int, payload: SaveWorkoutPlanRequest):
                 (user_id, position, item.exercise_name, item.sets, item.reps, item.notes),
             )
 
+    await manager.broadcast({"event": "workout_updated", "user_id": user_id})
     return get_member_workout(user_id)
 
 
@@ -99,7 +101,7 @@ def get_my_workout(user_id: int = Depends(auth.require_member)):
 
 
 @router.patch("/me/workout/{item_id}/toggle", response_model=WorkoutItemOut)
-def toggle_my_item(item_id: int, user_id: int = Depends(auth.require_member)):
+async def toggle_my_item(item_id: int, user_id: int = Depends(auth.require_member)):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, user_id, position, exercise_name, sets, reps, notes, is_done "
@@ -116,6 +118,8 @@ def toggle_my_item(item_id: int, user_id: int = Depends(auth.require_member)):
     new_done = 0 if row["is_done"] else 1
     with db_cursor(commit=True) as cur:
         cur.execute("UPDATE workout_items SET is_done=? WHERE id=?", (new_done, item_id))
+
+    await manager.broadcast({"event": "workout_updated", "user_id": user_id})
 
     return WorkoutItemOut(
         id=row["id"],

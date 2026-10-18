@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends
 from .. import auth, config
 from ..database import get_setting, set_setting
 from ..models import BehaviorSettings, ClubInfo
+from ..ws_manager import manager
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(auth.require_manager)])
 
@@ -126,8 +127,9 @@ def get_club_info():
 
 
 @router.put("/club-info", response_model=ClubInfo)
-def update_club_info(body: ClubInfo):
+async def update_club_info(body: ClubInfo):
     set_setting(_CLUB_NAME_KEY, body.club_name)
     set_setting(_CLUB_PHONE_KEY, body.phone or "")
     set_setting(_CLUB_ADDRESS_KEY, body.address or "")
+    await manager.broadcast({"event": "club_updated"})
     return _current_club_info()

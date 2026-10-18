@@ -82,6 +82,27 @@ async def ws_queue(websocket: WebSocket):
         await manager.disconnect(websocket)
 
 
+@app.websocket("/ws/member")
+async def ws_member(websocket: WebSocket):
+    """Live "something changed" signal for the logged-in member's own panel
+    (membership, attendance, workout plan, profile, club name). Carries no
+    personal data: the panel re-fetches through /api/me/* after each signal."""
+    if websocket.session.get("role") != "member":
+        await websocket.close(code=4401)
+        return
+    user_id = websocket.session.get("user_id")
+    if not isinstance(user_id, int) or not await manager.connect_member(websocket, user_id):
+        await websocket.close(code=4429)
+        return
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.disconnect_member(websocket, user_id)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": __version__}
