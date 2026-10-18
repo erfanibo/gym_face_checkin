@@ -69,7 +69,7 @@ app.include_router(system.router)
 async def ws_queue(websocket: WebSocket):
     # SessionMiddleware also populates .session on the websocket handshake
     # (cookies are sent with the upgrade request), so the same login applies.
-    if websocket.session.get("role") != "manager":
+    if not auth.session_is_manager(websocket.session):
         await websocket.close(code=4401)
         return
     await manager.connect(websocket)
@@ -87,11 +87,11 @@ async def ws_member(websocket: WebSocket):
     """Live "something changed" signal for the logged-in member's own panel
     (membership, attendance, workout plan, profile, club name). Carries no
     personal data: the panel re-fetches through /api/me/* after each signal."""
-    if websocket.session.get("role") != "member":
+    user_id = auth.session_member_id(websocket.session)
+    if user_id is None:
         await websocket.close(code=4401)
         return
-    user_id = websocket.session.get("user_id")
-    if not isinstance(user_id, int) or not await manager.connect_member(websocket, user_id):
+    if not await manager.connect_member(websocket, user_id):
         await websocket.close(code=4429)
         return
     try:

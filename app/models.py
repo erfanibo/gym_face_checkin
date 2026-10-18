@@ -170,8 +170,10 @@ class ChangeManagerPasswordRequest(BaseModel):
 
 
 class AuthIdentity(BaseModel):
-    role: Optional[str] = None  # 'manager' | 'member' | None
+    role: Optional[str] = None  # 'manager' | 'member' | None  (manager wins if both are logged in)
     user_id: Optional[int] = None
+    manager: bool = False       # logged in as manager (independent of the member login)
+    member: bool = False        # logged in as a member (independent of the manager login)
 
 
 # ---------------------------------------------------------------------------

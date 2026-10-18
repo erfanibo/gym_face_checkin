@@ -381,7 +381,7 @@ let profile = null;   // { full_name, has_password }
 async function checkAuth() {
   const res = await fetch(`${API_BASE}/api/auth/me`);
   const data = await res.json().catch(() => ({ role: null }));
-  if (data.role === 'member') {
+  if (data.member === true || data.role === 'member') {
     showApp();
   } else {
     showLogin();
@@ -398,9 +398,26 @@ function showLogin(message) {
 const VIEWS = ['dashboard', 'workout', 'membership', 'attendance'];
 const state = { plan: null, membership: null, attendance: null };
 
+/* یک پاسخ ۴۰۱ در بازخوانی خودکار نباید فوراً کاربر را خارج کند: ابتدا وضعیت ورود از سرور پرسیده
+   و درخواست یک بار دیگر تکرار می‌شود؛ فقط اگر سرور هم بگوید واردشده نیست، صفحه‌ی ورود نمایش داده می‌شود. */
+async function stillLoggedIn() {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/me`, { cache: 'no-store' });
+    const data = await res.json();
+    return data.member === true || data.role === 'member';
+  } catch { return true; }   // قطع موقت شبکه: خروج نمی‌دهیم
+}
+
+async function fetchMember(path, options) {
+  let res = await fetch(`${API_BASE}${path}`, options);
+  if (res.status === 401 && await stillLoggedIn()) res = await fetch(`${API_BASE}${path}`, options);
+  if (res.status === 401) showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
+  return res;
+}
+
 async function getJson(path) {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (res.status === 401) { showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'); return null; }
+  let res;
+  try { res = await fetchMember(path); } catch { return null; }
   if (!res.ok) return null;
   return res.json();
 }
@@ -642,17 +659,16 @@ async function submitLogin(event) {
 }
 
 async function logout() {
-  await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+  await fetch(`${API_BASE}/api/auth/logout?scope=member`, { method: 'POST' });
   try { sessionStorage.removeItem('pwNoticeDismissed'); } catch { /* مهم نیست */ }
   window.location.reload();
 }
 
 /* ---- پروفایل، هشدار امنیتی و تعیین رمز ---- */
 async function loadProfile() {
-  const res = await fetch(`${API_BASE}/api/me/profile`);
-  if (res.status === 401) { showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.'); return; }
-  if (!res.ok) return;
-  profile = await res.json();
+  const data = await getJson('/api/me/profile');
+  if (!data) return;
+  profile = data;
   renderProfile();
 }
 
@@ -772,11 +788,8 @@ function renderPlan(items) {
 }
 
 async function toggleItem(itemId) {
-  const res = await fetch(`${API_BASE}/api/me/workout/${itemId}/toggle`, { method: 'PATCH' });
-  if (res.status === 401) {
-    showLogin('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
-    return;
-  }
+  let res;
+  try { res = await fetchMember(`/api/me/workout/${itemId}/toggle`, { method: 'PATCH' }); } catch { return; }
   if (!res.ok) return;
   await loadPlan();
 }

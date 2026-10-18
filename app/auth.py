@@ -20,6 +20,7 @@ one local network.
 import hashlib
 import hmac
 import secrets
+from typing import Optional
 
 from fastapi import HTTPException, Request
 
@@ -138,8 +139,63 @@ def set_member_password(user_id: int, new_password: str | None) -> bool:
 #         @router.get("/me/plan")
 #         def my_plan(user_id: int = Depends(auth.require_member)): ...
 # ---------------------------------------------------------------------------
+#
+# Both panels live on the same origin, so they share ONE session cookie. The
+# manager and member logins are therefore kept as two independent entries in
+# that cookie ("manager" and "member_id"): logging in or out on one panel never
+# touches the other (e.g. the owner testing the member panel in the same
+# browser they manage from). Cookies issued by older versions used a single
+# "role" entry; they are still understood.
+def session_is_manager(session) -> bool:
+    return bool(session.get("manager")) or session.get("role") == "manager"
+
+
+def session_member_id(session) -> Optional[int]:
+    uid = session.get("member_id")
+    if uid is None and session.get("role") == "member":
+        uid = session.get("user_id")
+    return uid if isinstance(uid, int) and not isinstance(uid, bool) else None
+
+
+def _drop_legacy_keys(session) -> None:
+    session.pop("role", None)
+    session.pop("user_id", None)
+
+
+def login_session_as_manager(session) -> None:
+    member_id = session_member_id(session)
+    _drop_legacy_keys(session)
+    session["manager"] = True
+    if member_id is not None:
+        session["member_id"] = member_id
+
+
+def login_session_as_member(session, user_id: int) -> None:
+    was_manager = session_is_manager(session)
+    _drop_legacy_keys(session)
+    session["member_id"] = user_id
+    if was_manager:
+        session["manager"] = True
+
+
+def logout_session(session, scope: str | None = None) -> None:
+    """scope 'manager' / 'member' ends only that login; anything else ends both."""
+    if scope == "manager":
+        member_id = session_member_id(session)
+        session.clear()
+        if member_id is not None:
+            session["member_id"] = member_id
+    elif scope == "member":
+        was_manager = session_is_manager(session)
+        session.clear()
+        if was_manager:
+            session["manager"] = True
+    else:
+        session.clear()
+
+
 def require_manager(request: Request) -> None:
-    if request.session.get("role") != "manager":
+    if not session_is_manager(request.session):
         raise HTTPException(401, "ورود مدیر لازم است")
 
 
@@ -147,17 +203,19 @@ def require_member(request: Request) -> int:
     """Returns the logged-in member's user_id straight from the signed
     session -- never trust a user_id passed in the request body/query for
     "which member is this" checks."""
-    if request.session.get("role") != "member":
+    user_id = session_member_id(request.session)
+    if user_id is None:
         raise HTTPException(401, "ورود عضو لازم است")
-    return request.session["user_id"]
+    return user_id
 
 
 def current_identity(request: Request) -> dict:
     """Backing GET /api/auth/me. Never raises -- just reports what's there so
     the frontend can decide which panel/login-screen to show on page load."""
-    role = request.session.get("role")
-    if role == "manager":
-        return {"role": "manager"}
-    if role == "member":
-        return {"role": "member", "user_id": request.session.get("user_id")}
-    return {"role": None}
+    is_manager = session_is_manager(request.session)
+    member_id = session_member_id(request.session)
+    identity: dict = {"role": "manager" if is_manager else ("member" if member_id is not None else None),
+                      "manager": is_manager, "member": member_id is not None}
+    if member_id is not None:
+        identity["user_id"] = member_id
+    return identity

@@ -16,9 +16,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def manager_login(payload: ManagerLoginRequest, request: Request):
     if not auth.verify_manager_password(payload.password):
         raise HTTPException(401, "رمز عبور اشتباه است")
-    request.session.clear()
-    request.session["role"] = "manager"
-    return AuthIdentity(role="manager")
+    auth.login_session_as_manager(request.session)
+    return AuthIdentity(**auth.current_identity(request))
 
 
 @router.post("/member/login", response_model=AuthIdentity)
@@ -43,15 +42,14 @@ def member_login(payload: MemberLoginRequest, request: Request):
         raise bad_login
 
     ratelimit.member_login_by_phone.clear(key)
-    request.session.clear()
-    request.session["role"] = "member"
-    request.session["user_id"] = row["id"]
-    return AuthIdentity(role="member", user_id=row["id"])
+    auth.login_session_as_member(request.session, row["id"])
+    return AuthIdentity(**auth.current_identity(request))
 
 
 @router.post("/logout")
-def logout(request: Request):
-    request.session.clear()
+def logout(request: Request, scope: str | None = None):
+    """?scope=manager or ?scope=member ends only that panel's login; no scope ends both."""
+    auth.logout_session(request.session, scope)
     return {"ok": True}
 
 

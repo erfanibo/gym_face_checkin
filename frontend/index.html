@@ -1291,7 +1291,7 @@ async function loadPublicClubName() {
 async function checkAuth() {
   const res = await fetch(`${API_BASE}/api/auth/me`);
   const data = await res.json().catch(() => ({ role: null }));
-  if (data.role === 'manager') showApp();
+  if (data.manager === true || data.role === 'manager') showApp();
   else showLoginScreen();
 }
 
@@ -1363,7 +1363,7 @@ async function submitLogin() {
 }
 
 async function logout() {
-  await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' });
+  await fetch(`${API_BASE}/api/auth/logout?scope=manager`, { method: 'POST' });
   window.location.reload();
 }
 
