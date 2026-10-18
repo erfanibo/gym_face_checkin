@@ -455,6 +455,7 @@
         <div>
           <div class="cb-title">دوربین وصل نیست</div>
           <div class="cb-text">سیستم بدون دوربین هم اجرا می‌شود، ولی تا وصل‌شدن دوربین، تشخیص چهره و ثبت تردد خودکار کار نمی‌کند. خودش هر چند ثانیه یک‌بار دوباره تلاش می‌کند — نیازی به ری‌استارت سرویس نیست.</div>
+          <div class="cb-text" id="cameraProblemHint" style="margin-top:4px; color:var(--text)"></div>
         </div>
       </div>
 
@@ -1026,6 +1027,7 @@ const pendingItems = new Map();
 let members = [];
 let appStarted = false;
 let cameraConnected = null; // null = not known yet (before the first load/WS event)
+let cameraProblem = null;  // device_missing | no_permission | open_failed | no_frames (از سرور)
 
 /* ============================================================ */
 /* icons (inline SVG, no emoji)                                  */
@@ -1335,6 +1337,7 @@ async function loadCameraStatus() {
     if (!res.ok) return; // not fatal -- the WS event will still keep it live from here on
     const data = await res.json();
     cameraConnected = data.connected;
+    cameraProblem = data.problem || null;
   } catch {
     // offline for a moment -- leave cameraConnected as-is (null stays hidden)
   } finally {
@@ -1342,8 +1345,16 @@ async function loadCameraStatus() {
   }
 }
 
+const CAMERA_PROBLEM_HINTS = {
+  device_missing: 'علت: دستگاه دوربین داخل سرویس دیده نمی‌شود. اگر سرویس با Docker اجرا شده، آن را با فایل docker-compose.camera.yml بالا بیاورید (راهنما در README).',
+  no_permission: 'علت: سرویس اجازهٔ خواندن دستگاه دوربین را ندارد؛ دسترسی (گروه video) را بررسی کنید.',
+  open_failed: 'علت: دوربین باز نشد. ممکن است برنامهٔ دیگری از آن استفاده کند یا شمارهٔ دوربین (CAMERA_INDEX) درست نباشد.',
+  no_frames: 'علت: دوربین باز شد ولی تصویر نمی‌دهد. برنامه‌های دیگری که از دوربین استفاده می‌کنند (مثل ffplay یا تب مرورگر) را ببندید؛ در صورت ادامه، CAMERA_FOURCC=MJPG را امتحان کنید.',
+};
+
 function updateCameraBanner() {
   const banner = document.getElementById('cameraStatusBanner');
+  document.getElementById('cameraProblemHint').textContent = CAMERA_PROBLEM_HINTS[cameraProblem] || '';
   const onReceptionPage = !!activeLeafId && activeLeafId.startsWith('reception');
   banner.classList.toggle('show', onReceptionPage && cameraConnected === false);
 }
@@ -2693,6 +2704,7 @@ function connectWs() {
       addRecognitionLogEntry({ user_id: msg.user_id, full_name: msg.full_name, created_at: msg.created_at });
     } else if (msg.event === 'camera_status') {
       cameraConnected = msg.connected;
+      cameraProblem = msg.problem || null;
       updateCameraBanner();
     } else if (msg.event === 'backup_restored') {
       if (restoringNow) return;

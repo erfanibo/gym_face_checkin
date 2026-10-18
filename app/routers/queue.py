@@ -80,7 +80,7 @@ def get_camera_status(request: Request):
     FaceEngine._set_camera_connected) keeps it live without polling.
     """
     engine = request.app.state.face_engine
-    return CameraStatus(connected=engine.camera_connected)
+    return CameraStatus(connected=engine.camera_connected, problem=engine.camera_problem)
 
 
 @router.post("/{pending_id}/register", response_model=RegisteredUserOut)

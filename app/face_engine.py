@@ -36,8 +36,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import glob
 import hmac
 import json
+import os
+import sys
 import threading
 import time
 import uuid
@@ -124,6 +127,10 @@ class FaceEngine:
         # background thread, and CPython's GIL makes a single attribute
         # read/write atomic enough for a status flag like this.
         self.camera_connected: bool = False
+        # Why the camera is not connected right now (None while connected / not yet tried):
+        #   device_missing | no_permission | open_failed | no_frames
+        # Shown in the panel's banner so the manager does not have to read logs.
+        self.camera_problem: str | None = None
 
         self._pending_cache: list[dict] = []  # {id, encodings: [..], last_seen}
 
@@ -256,6 +263,7 @@ class FaceEngine:
         """
         video = None
         frame_count = 0
+        read_failures = 0
         try:
             while self._running:
                 if video is None:
@@ -268,18 +276,24 @@ class FaceEngine:
                 ok, frame = video.read()
                 if not ok:
                     # A single dropped frame happens occasionally even on a
-                    # healthy camera (skip it, keep going); but if the device
-                    # itself is no longer open, this is an actual disconnect
-                    # (unplugged mid-run) -- drop it and go back to the retry
-                    # branch above instead of spinning on a dead handle forever.
-                    if not video.isOpened():
+                    # healthy camera (skip it, keep going). But if the device
+                    # is no longer open (unplugged mid-run), OR it stays open
+                    # while delivering nothing for a while (e.g. another program
+                    # grabbed it), drop it and go back to the retry branch above
+                    # instead of spinning on a dead handle forever -- and without
+                    # still claiming "connected".
+                    read_failures += 1
+                    if not video.isOpened() or read_failures >= config.CAMERA_MAX_READ_FAILURES:
                         video.release()
                         video = None
                         self._video = None
-                        self._set_camera_connected(False)
+                        read_failures = 0
+                        self._set_camera_connected(False, "no_frames")
+                        time.sleep(config.CAMERA_RETRY_SECONDS)
                     else:
                         time.sleep(0.05)
                     continue
+                read_failures = 0
 
                 frame_count += 1
                 if frame_count % config.PROCESS_EVERY_N_FRAMES != 0:
@@ -295,31 +309,84 @@ class FaceEngine:
                 video.release()
             self._set_camera_connected(False)
 
+    def _diagnose_open_failure(self) -> str:
+        """Best guess at WHY the camera could not be opened, as a problem code (see camera_problem)."""
+        if sys.platform.startswith("linux"):
+            path = f"/dev/video{config.CAMERA_INDEX}"
+            if not os.path.exists(path):
+                return "device_missing"
+            if not os.access(path, os.R_OK | os.W_OK):
+                return "no_permission"
+        return "open_failed"
+
+    def _open_capture(self) -> cv2.VideoCapture | None:
+        """Opens config.CAMERA_INDEX. On Linux the V4L2 backend is asked for explicitly first (OpenCV's
+        automatic choice can pick a backend that cannot read some webcams), then OpenCV's default."""
+        backends: list = [None]
+        if sys.platform.startswith("linux") and hasattr(cv2, "CAP_V4L2"):
+            backends = [cv2.CAP_V4L2, None]
+        for backend in backends:
+            video = cv2.VideoCapture(config.CAMERA_INDEX) if backend is None else cv2.VideoCapture(config.CAMERA_INDEX, backend)
+            if video.isOpened():
+                if config.CAMERA_FOURCC:
+                    video.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*config.CAMERA_FOURCC))
+                if config.CAMERA_WIDTH > 0:
+                    video.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+                if config.CAMERA_HEIGHT > 0:
+                    video.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+                return video
+            video.release()
+        return None
+
     def _try_open_camera(self) -> cv2.VideoCapture | None:
         """One attempt to (re)open config.CAMERA_INDEX. Returns the opened
         capture, or None (and flips camera_connected to False) if it's not
-        available right now -- caller just waits and retries."""
-        video = cv2.VideoCapture(config.CAMERA_INDEX)
-        if not video.isOpened():
-            video.release()
-            self._set_camera_connected(False)
+        available right now -- caller just waits and retries. "Opened" is not
+        enough: the camera must also hand over a real frame, otherwise (device
+        busy, unsupported format, ...) it would be reported as connected while
+        nothing ever arrives."""
+        video = self._open_capture()
+        if video is None:
+            self._set_camera_connected(False, self._diagnose_open_failure())
             return None
-        self._set_camera_connected(True)
-        return video
+        for _ in range(config.CAMERA_OPEN_READ_ATTEMPTS):
+            ok, _frame = video.read()
+            if ok:
+                self._set_camera_connected(True)
+                return video
+            time.sleep(0.1)
+        video.release()
+        self._set_camera_connected(False, "no_frames")
+        return None
 
-    def _set_camera_connected(self, connected: bool):
-        """Edge-triggered: only logs/broadcasts on an actual change, so the
-        retry loop polling every CAMERA_RETRY_SECONDS doesn't spam the log or
-        the WebSocket while the camera stays missing."""
-        if connected == self.camera_connected:
+    _PROBLEM_HINTS = {
+        "device_missing": "the device does not exist in this process. In Docker this usually means the camera "
+                          "override was not applied: docker compose -f docker-compose.yml -f docker-compose.camera.yml up -d",
+        "no_permission": "the device exists but this user cannot read/write it (check the 'video' group / permissions)",
+        "open_failed": "the device could not be opened (another program may be using it, or CAMERA_INDEX is wrong)",
+        "no_frames": "the device opened but delivers no frames (busy -- close ffplay/browser tabs using the camera -- "
+                     "or an unsupported format; try CAMERA_FOURCC=MJPG)",
+    }
+
+    def _set_camera_connected(self, connected: bool, problem: str | None = None):
+        """Edge-triggered: only logs/broadcasts on an actual change (of the connected flag OR of the
+        reason), so the retry loop polling every CAMERA_RETRY_SECONDS doesn't spam the log or the
+        WebSocket while the camera stays missing."""
+        problem = None if connected else problem
+        if connected == self.camera_connected and problem == self.camera_problem:
             return
         self.camera_connected = connected
+        self.camera_problem = problem
         if connected:
             print(f"[face_engine] camera index {config.CAMERA_INDEX} connected")
         else:
+            seen = sorted(glob.glob("/dev/video*")) if sys.platform.startswith("linux") else []
             print(f"[face_engine] camera index {config.CAMERA_INDEX} not available "
                   f"-- will keep retrying every {config.CAMERA_RETRY_SECONDS}s")
-        self._broadcast_soon({"event": "camera_status", "connected": connected})
+            if problem:
+                print(f"[face_engine]   reason ({problem}): {self._PROBLEM_HINTS.get(problem, '')}"
+                      + (f" | video devices visible here: {', '.join(seen) or 'none'}" if sys.platform.startswith("linux") else ""))
+        self._broadcast_soon({"event": "camera_status", "connected": connected, "problem": problem})
 
     def _detect(self, frame: np.ndarray) -> tuple[list[tuple], list[np.ndarray]]:
         """Downscale + detect + encode. Shared by the primary frame and every

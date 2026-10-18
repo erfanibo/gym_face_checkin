@@ -7,7 +7,11 @@ services:
       - "8000:8000"
     environment:
       - DATA_DIR=/app/data
-      - CAMERA_INDEX=0
+      - CAMERA_INDEX=${CAMERA_INDEX:-0}
+      # فقط اگر دوربین با تنظیم پیش‌فرض تصویر نمی‌دهد (مثلاً CAMERA_FOURCC=MJPG)
+      - CAMERA_FOURCC=${CAMERA_FOURCC:-}
+      - CAMERA_WIDTH=${CAMERA_WIDTH:-0}
+      - CAMERA_HEIGHT=${CAMERA_HEIGHT:-0}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
       # بررسی نسخه‌ی جدید (تنظیمات > به‌روزرسانی سیستم). «owner/repo» ریپوی خودتان اگر فورک کرده‌اید؛

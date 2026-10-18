@@ -35,6 +35,18 @@ FRAME_RESIZE_SCALE = 0.25        # frame is downscaled by this factor before det
 # paused until one is connected, with no restart needed.
 CAMERA_RETRY_SECONDS = 5
 
+# Optional tuning for cameras that OpenCV does not read well with its defaults. All off by default.
+#   CAMERA_FOURCC="MJPG"  -> ask the camera for MJPG (fixes many USB cameras that open but give no frames
+#                            at the default format, or are too slow in YUYV). "" = leave the camera's own default.
+#   CAMERA_WIDTH / CAMERA_HEIGHT -> requested resolution (0 = camera default).
+CAMERA_FOURCC = os.environ.get("CAMERA_FOURCC", "").strip()[:4]
+CAMERA_WIDTH = int(os.environ.get("CAMERA_WIDTH", "0") or 0)
+CAMERA_HEIGHT = int(os.environ.get("CAMERA_HEIGHT", "0") or 0)
+# A freshly opened camera must deliver a real frame within this many reads (0.1 s apart) to count as connected;
+# and a connected camera that fails this many reads IN A ROW (~50 ms apart) is treated as lost and reopened.
+CAMERA_OPEN_READ_ATTEMPTS = 20
+CAMERA_MAX_READ_FAILURES = 50
+
 # ---------------------------------------------------------------------------
 # Face matching
 # ---------------------------------------------------------------------------

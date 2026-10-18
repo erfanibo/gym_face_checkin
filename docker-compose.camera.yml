@@ -21,3 +21,6 @@ services:
   gym-face-checkin:
     devices:
       - "/dev/video0:/dev/video0"
+    # دسترسی به دستگاه‌های ویدیو حتی وقتی داکر بدون روت (rootless) اجرا می‌شود
+    group_add:
+      - video

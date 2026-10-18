@@ -34,6 +34,10 @@ class ManualRegisterRequest(BaseModel):
 
 class CameraStatus(BaseModel):
     connected: bool = Field(..., description="آیا FaceEngine همین الان دوربین را باز و در حال خواندن فریم دارد")
+    problem: Optional[str] = Field(
+        None,
+        description="علت وصل‌نبودن: device_missing | no_permission | open_failed | no_frames (None وقتی وصل است)",
+    )
 
 
 class AssignPendingRequest(BaseModel):
