@@ -339,6 +339,11 @@
     width: 100%; font-family: inherit; font-weight: 500;
   }
   .nav-child:hover { background: var(--panel-2); color: var(--text); }
+  .nav-child.soon { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: not-allowed; }
+  .nav-child.soon:disabled { opacity: 1; }
+  .nav-child.soon > span:first-child { opacity: .5; }
+  .nav-child.soon:hover { background: transparent; color: var(--muted); }
+  .soon-badge { font-size: 10.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--c-finance); color: var(--c-finance); white-space: nowrap; }
   .nav-child.active { color: var(--text); background: var(--panel-2); font-weight: 600; box-shadow: inset -3px 0 0 var(--acc, var(--accent)); }
   .nav-subchildren {
     display: none; flex-direction: column; gap: 1px;
@@ -721,58 +726,6 @@
         <div class="error-msg" id="plansError" style="margin-top:10px;"></div>
       </div>
 
-      <!-- ============ مالی و شهریه: پرداخت‌ها ============ -->
-      <div class="page" data-page="finance-payments" style="--acc:var(--c-finance)">
-        <div class="section-title">
-          <h2>پرداخت‌ها</h2>
-          <button class="btn-secondary btn-sm" style="margin-right:auto;" disabled>ثبت پرداخت جدید</button>
-        </div>
-        <div class="data-table-wrap">
-          <table class="data-table">
-            <thead><tr><th>عضو</th><th>مبلغ</th><th>تاریخ</th><th>روش پرداخت</th></tr></thead>
-            <tbody><tr class="table-empty-row"><td colspan="4">پرداختی ثبت نشده است.</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ============ مالی و شهریه: بدهی‌ها ============ -->
-      <div class="page" data-page="finance-debts" style="--acc:var(--c-finance)">
-        <div class="section-title"><h2>بدهی‌های معوق</h2></div>
-        <div class="data-table-wrap">
-          <table class="data-table">
-            <thead><tr><th>عضو</th><th>مبلغ بدهی</th><th>از تاریخ</th></tr></thead>
-            <tbody><tr class="table-empty-row"><td colspan="3">بدهی ثبت‌شده‌ای وجود ندارد.</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ============ مالی و شهریه: تاریخچه مالی ============ -->
-      <div class="page" data-page="finance-history" style="--acc:var(--c-finance)">
-        <div class="section-title"><h2>تاریخچه‌ی مالی</h2></div>
-        <div class="not-connected">
-          <div class="nc-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
-            </svg>
-          </div>
-          <div class="nc-title">تاریخچه‌ی تراکنش‌ها</div>
-          <div class="nc-text">این بخش به‌زودی فعال می‌شود.</div>
-        </div>
-      </div>
-
-      <!-- ============ مالی و شهریه: گزارش‌های مالی (مشترک با گزارش‌ها) ============ -->
-      <div class="page" data-page="finance-reports" style="--acc:var(--c-finance)">
-        <div class="not-connected">
-          <div class="nc-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="4" y="11" width="3.4" height="9" rx="1"/><rect x="10.3" y="5" width="3.4" height="15" rx="1"/><rect x="16.6" y="14" width="3.4" height="6" rx="1"/>
-            </svg>
-          </div>
-          <div class="nc-title">گزارش مالی</div>
-          <div class="nc-text">این بخش به‌زودی فعال می‌شود.</div>
-        </div>
-      </div>
-
       <!-- ============ گزارش‌ها: گزارش تردد ============ -->
       <div class="page" data-page="reports-attendance" style="--acc:var(--c-reports)">
         <div class="section-title">
@@ -1073,16 +1026,16 @@ const NAV = [
 
   { id: 'finance', label: 'مالی و شهریه', accent: 'finance', icon: ICONS.finance, children: [
       { id: 'finance-plans', label: 'تعرفه‌ها و پلن‌ها', page: 'finance-plans', title: 'تعرفه‌ها و پلن‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
-      { id: 'finance-payments', label: 'پرداخت‌ها', page: 'finance-payments', title: 'پرداخت‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
-      { id: 'finance-debts', label: 'بدهی‌ها', page: 'finance-debts', title: 'بدهی‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
-      { id: 'finance-history', label: 'تاریخچه مالی', page: 'finance-history', title: 'تاریخچه مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
-      { id: 'finance-reports', label: 'گزارش‌های مالی', page: 'finance-reports', title: 'گزارش‌های مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها' },
+      { id: 'finance-payments', label: 'پرداخت‌ها', page: 'finance-payments', title: 'پرداخت‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها', soon: true },
+      { id: 'finance-debts', label: 'بدهی‌ها', page: 'finance-debts', title: 'بدهی‌ها', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها', soon: true },
+      { id: 'finance-history', label: 'تاریخچه مالی', page: 'finance-history', title: 'تاریخچه مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها', soon: true },
+      { id: 'finance-reports', label: 'گزارش‌های مالی', page: 'finance-reports', title: 'گزارش‌های مالی', subtitle: 'مدیریت پرداخت‌ها و بدهی‌ها', soon: true },
   ]},
 
   { id: 'reports', label: 'گزارش‌ها', accent: 'reports', icon: ICONS.reports, children: [
       { id: 'reports-attendance', label: 'گزارش تردد', page: 'reports-attendance', title: 'گزارش تردد', subtitle: 'تحلیل و خروجی اطلاعات' },
       { id: 'reports-members', label: 'گزارش اعضا', page: 'members-report', title: 'گزارش اعضا', subtitle: 'تحلیل و خروجی اطلاعات' },
-      { id: 'reports-finance', label: 'گزارش مالی', page: 'finance-reports', title: 'گزارش مالی', subtitle: 'تحلیل و خروجی اطلاعات' },
+      { id: 'reports-finance', label: 'گزارش مالی', page: 'finance-reports', title: 'گزارش مالی', subtitle: 'تحلیل و خروجی اطلاعات', soon: true },
       { id: 'reports-custom', label: 'گزارش‌های اختصاصی', page: 'reports-custom', title: 'گزارش‌های اختصاصی', subtitle: 'تحلیل و خروجی اطلاعات' },
       { id: 'reports-export', label: 'PDF / خروجی اکسل', page: 'reports-export', title: 'خروجی گزارش‌ها', subtitle: 'تحلیل و خروجی اطلاعات' },
   ]},
@@ -1168,12 +1121,19 @@ function renderNavNode(node, depth) {
         </div>
       </div>`;
   }
+  if (node.soon) return renderSoonItem(node);
   return `<button class="nav-child" data-nav-id="${node.id}" onclick="onNavClick('${node.id}')">${node.label}</button>`;
+}
+
+/* بخش‌های هنوز آماده‌نشده: در منو دیده می‌شوند ولی غیرفعال‌اند و با «به‌زودی…» علامت می‌خورند. */
+function renderSoonItem(node) {
+  return `<button class="nav-child soon" data-nav-id="${node.id}" disabled aria-disabled="true" title="به‌زودی…">
+    <span>${node.label}</span><span class="soon-badge">به‌زودی…</span></button>`;
 }
 
 function onNavClick(id) {
   const node = findLeaf(id);
-  if (!node) return;
+  if (!node || node.soon) return;
 
   if (node.children) {
     // group toggle (accordion): top-level groups close siblings, nested groups don't
@@ -1194,7 +1154,7 @@ function onNavClick(id) {
 
 function goToPage(leafId) {
   const node = findLeaf(leafId);
-  if (!node || !node.page) return;
+  if (!node || !node.page || node.soon) return;
   activeLeafId = leafId;
 
   // open the ancestor group chain so the active item is visible
