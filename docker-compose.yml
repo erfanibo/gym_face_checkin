@@ -28,9 +28,13 @@ services:
       - MANAGER_INITIAL_PASSWORD=${MANAGER_INITIAL_PASSWORD:-changeme}
     volumes:
       - ./data:/app/data
-    # NOTE: no `devices:` camera passthrough here on purpose -- see
-    # docker-compose.camera.yml. This base file always starts, with or
-    # without a webcam attached to the host (the app itself handles a
-    # missing/disconnected camera gracefully too, see app/face_engine.py);
-    # add the camera override only on the machine that actually sits next
-    # to the door camera.
+      # دوربین: پوشه‌ی /dev میزبان (فقط‌خواندنی) دیده می‌شود، ولی طبق قانون پایین فقط دستگاه‌های ویدیو
+      # (شماره‌ی اصلی ۸۱، یعنی /dev/video*) اجازه‌ی دسترسی دارند. بدون دوربین هم سرویس بدون خطا بالا
+      # می‌آید و اتصال یا جابه‌جایی دوربین بعد از بالا آمدن سرویس هم شناسایی می‌شود.
+      # (نگاشت ثابت `devices: /dev/video0` عمداً استفاده نشده: بدون دوربین، اجرای compose با خطا متوقف می‌شود.)
+      - /dev:/dev:ro
+    device_cgroup_rules:
+      - "c 81:* rmw"
+    # دسترسی به دستگاه‌های ویدیو حتی وقتی داکر بدون روت (rootless) اجرا می‌شود
+    group_add:
+      - video

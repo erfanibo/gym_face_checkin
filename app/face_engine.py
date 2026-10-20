@@ -360,8 +360,8 @@ class FaceEngine:
         return None
 
     _PROBLEM_HINTS = {
-        "device_missing": "the device does not exist in this process. In Docker this usually means the camera "
-                          "override was not applied: docker compose -f docker-compose.yml -f docker-compose.camera.yml up -d",
+        "device_missing": "the device does not exist in this process. In Docker, check that /dev/video* exists on the host "
+                          "(ls /dev/video*) and that the /dev bind in docker-compose.yml is applied; fallback: docker-compose.camera.yml",
         "no_permission": "the device exists but this user cannot read/write it (check the 'video' group / permissions)",
         "open_failed": "the device could not be opened (another program may be using it, or CAMERA_INDEX is wrong)",
         "no_frames": "the device opened but delivers no frames (busy -- close ffplay/browser tabs using the camera -- "
