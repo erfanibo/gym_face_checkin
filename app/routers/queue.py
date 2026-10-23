@@ -2,14 +2,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-import face_recognition
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import auth, config
 from ..database import db_cursor, generate_unique_membership_code
 from ..membership import apply_plan, get_active_plan
 from ..phone import ensure_phone_free as _ensure_phone_free
-from ..face_engine import add_face_sample, blob_to_encoding
+from ..face_samples import add_face_sample, blob_to_encoding
+from ..recognizer import get_recognizer
+from ..reembed import read_image, resolve_photo
 from ..models import (
     AssignPendingRequest,
     AssignPendingResponse,
@@ -32,30 +33,56 @@ def _pending_row_to_item(row) -> PendingItem:
     )
 
 
+def _pending_vector(pending_row) -> np.ndarray:
+    """
+    The pending face's vector in the ACTIVE recognizer's model. Rows queued while another model
+    (e.g. the old dlib engine) was active hold a vector that cannot be compared with today's
+    members, so it is rebuilt from the saved crop photo instead.
+    """
+    recognizer = get_recognizer()
+    if pending_row["model"] == recognizer.model_id:
+        return blob_to_encoding(pending_row["encoding"])
+    photo = resolve_photo(pending_row["photo_path"])
+    image = read_image(photo) if photo is not None else None
+    vector = recognizer.embed_image(image) if image is not None else None
+    if vector is None:
+        raise HTTPException(
+            422,
+            "این چهره با موتور تشخیص جدید قابل خواندن نیست. آن را از صف حذف کنید؛ "
+            "به‌محض اینکه دوباره جلوی دوربین بیاید، دوباره در صف ظاهر می‌شود.",
+        )
+    return vector
+
+
 def _find_duplicate_registered_face(pending_encoding: np.ndarray):
     """
     Checks the face being registered against EVERY sample of EVERY
     already-registered member (member_face_samples, not just each member's
     original single encoding -- a member registered from one angle should
     still be caught as a duplicate even if a later sample looks different).
-    Returns (existing_user_id, existing_full_name) if it's close enough to be
-    considered the same physical person, otherwise None.
+    Only samples made by the active recognizer model are comparable, so only
+    those are checked. Returns (existing_user_id, existing_full_name) if it's
+    close enough to be considered the same physical person, otherwise None.
     """
+    recognizer = get_recognizer()
     with db_cursor() as cur:
         cur.execute(
             """SELECT s.user_id, s.encoding, u.full_name
                FROM member_face_samples s
-               JOIN registered_users u ON u.id = s.user_id"""
+               JOIN registered_users u ON u.id = s.user_id
+               WHERE s.model = ?""",
+            (recognizer.model_id,),
         )
         rows = cur.fetchall()
-    if not rows:
+    vectors = [blob_to_encoding(r["encoding"]) for r in rows]
+    keep = [i for i, v in enumerate(vectors) if len(v) == len(pending_encoding)]
+    if not keep:
         return None
 
-    encodings = [blob_to_encoding(r["encoding"]) for r in rows]
-    distances = face_recognition.face_distance(encodings, pending_encoding)
-    best_idx = int(np.argmin(distances))
-    if distances[best_idx] <= config.REGISTRATION_DUPLICATE_FACE_TOLERANCE:
-        row = rows[best_idx]
+    distances = recognizer.distances(np.vstack([vectors[i] for i in keep]), pending_encoding)
+    best = int(np.argmin(distances))
+    if distances[best] <= recognizer.tolerances().registration_duplicate:
+        row = rows[keep[best]]
         return row["user_id"], row["full_name"]
     return None
 
@@ -80,7 +107,12 @@ def get_camera_status(request: Request):
     FaceEngine._set_camera_connected) keeps it live without polling.
     """
     engine = request.app.state.face_engine
-    return CameraStatus(connected=engine.camera_connected, problem=engine.camera_problem)
+    return CameraStatus(
+        connected=engine.camera_connected,
+        problem=engine.camera_problem,
+        recognizer_ready=engine.recognizer_ready,
+        recognizer_error=engine.recognizer_error,
+    )
 
 
 @router.post("/{pending_id}/register", response_model=RegisteredUserOut)
@@ -108,7 +140,7 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
         if plan is None:
             raise HTTPException(400, "تعرفه‌ی انتخاب‌شده پیدا نشد یا حذف شده است.")
 
-    pending_encoding = blob_to_encoding(pending_row["encoding"])
+    pending_encoding = _pending_vector(pending_row)
     duplicate = _find_duplicate_registered_face(pending_encoding)
     if duplicate is not None:
         existing_id, existing_name = duplicate
@@ -138,7 +170,9 @@ async def register_pending(pending_id: int, payload: RegisterPendingRequest, req
                     membership_code,
                     payload.full_name,
                     phone,
-                    pending_row["encoding"],
+                    # legacy column: only the dlib engine ever read it (via the startup backfill, which
+                    # assumes dlib vectors), so any other model's vector must not be written here
+                    pending_row["encoding"] if get_recognizer().model_id == "dlib" else None,
                     pending_row["photo_path"],
                     now,
                 ),
@@ -208,7 +242,7 @@ async def assign_pending_to_member(pending_id: int, payload: AssignPendingReques
     if member_row is None:
         raise HTTPException(404, "عضوی با این شناسه پیدا نشد")
 
-    pending_encoding = blob_to_encoding(pending_row["encoding"])
+    pending_encoding = _pending_vector(pending_row)
     add_face_sample(payload.user_id, pending_encoding, source="assigned")
 
     with db_cursor(commit=True) as cur:
@@ -216,7 +250,10 @@ async def assign_pending_to_member(pending_id: int, payload: AssignPendingReques
             "UPDATE pending_queue SET status='registered', registered_user_id=? WHERE id=?",
             (payload.user_id, pending_id),
         )
-        cur.execute("SELECT COUNT(*) AS n FROM member_face_samples WHERE user_id=?", (payload.user_id,))
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM member_face_samples WHERE user_id=? AND model=?",
+            (payload.user_id, get_recognizer().model_id),
+        )
         sample_count = cur.fetchone()["n"]
 
     # keep the in-memory recognition caches in sync with the DB

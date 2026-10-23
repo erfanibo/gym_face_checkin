@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import auth
 from ..database import db_cursor, generate_unique_membership_code
 from ..phone import ensure_phone_free as _ensure_phone_free
+from ..recognizer import get_recognizer
 from ..membership import apply_manual_days, apply_plan, get_active_plan
 from ..models import (
     AssignPlanRequest,
@@ -23,9 +24,9 @@ from ..ws_manager import manager
 # panel gets its own separate, read-only "my own data" endpoints later.
 router = APIRouter(prefix="/api", tags=["users"], dependencies=[Depends(auth.require_manager)])
 
-_USER_WITH_ATTENDANCE_SELECT = """
+_USER_WITH_ATTENDANCE_SELECT_TEMPLATE = """
     SELECT u.*, la.checkin_at AS last_checkin_at, la.event_type AS last_event_type,
-           EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id) AS has_face_sample,
+           EXISTS(SELECT 1 FROM member_face_samples fs WHERE fs.user_id = u.id AND fs.model = {model}) AS has_face_sample,
            (SELECT pu.plan_name FROM membership_purchases pu WHERE pu.user_id = u.id AND pu.plan_id IS NOT NULL ORDER BY pu.id DESC LIMIT 1) AS last_plan_name,
            (u.member_password_hash IS NOT NULL) AS has_member_password
     FROM registered_users u
@@ -38,6 +39,14 @@ _USER_WITH_ATTENDANCE_SELECT = """
         ) a2 ON a2.user_id = a1.user_id AND a2.max_id = a1.id
     ) la ON la.user_id = u.id
 """
+
+
+def _user_select() -> str:
+    """The member SELECT with has_face_sample meaning "has a face sample the CURRENT recognizer can
+    use" (samples of another model don't count: they can't match anyone). The model id comes from
+    our own config, never from a request; it is quoted anyway."""
+    model = get_recognizer().model_id.replace("'", "''")
+    return _USER_WITH_ATTENDANCE_SELECT_TEMPLATE.replace("{model}", f"'{model}'")
 
 
 def _row_to_user_out(r) -> RegisteredUserOut:
@@ -61,7 +70,7 @@ def _row_to_user_out(r) -> RegisteredUserOut:
 @router.get("/users", response_model=list[RegisteredUserOut])
 def list_users():
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " ORDER BY u.created_at DESC")
+        cur.execute(_user_select() + " ORDER BY u.created_at DESC")
         rows = cur.fetchall()
     return [_row_to_user_out(r) for r in rows]
 
@@ -111,7 +120,7 @@ async def create_user_manual(payload: ManualRegisterRequest, request: Request):
             apply_plan(cur, new_user_id, plan)  # همان تراکنش: یا عضو+پلن هر دو، یا هیچ‌کدام
 
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (new_user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (new_user_id,))
         row = cur.fetchone()
     result = _row_to_user_out(row)
 
@@ -238,7 +247,7 @@ async def update_user(user_id: int, payload: UpdateUserRequest, request: Request
     await manager.broadcast({"event": "member_updated", "id": user_id, "full_name": new_name, "phone": new_phone})
 
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (user_id,))
         updated_row = cur.fetchone()
     return _row_to_user_out(updated_row)
 
@@ -295,7 +304,7 @@ async def extend_membership(user_id: int, payload: ExtendMembershipRequest, requ
     await manager.broadcast({"event": "membership_updated", "id": user_id, "membership_expires_at": new_expiry_iso})
 
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (user_id,))
         updated_row = cur.fetchone()
     return _row_to_user_out(updated_row)
 
@@ -325,7 +334,7 @@ async def assign_plan(user_id: int, payload: AssignPlanRequest, request: Request
     })
 
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (user_id,))
         updated_row = cur.fetchone()
     return _row_to_user_out(updated_row)
 
@@ -340,7 +349,7 @@ async def reset_member_password(user_id: int):
     if not auth.set_member_password(user_id, None):
         raise HTTPException(404, "کاربری با این شناسه پیدا نشد")
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (user_id,))
         row = cur.fetchone()
     result = _row_to_user_out(row)
     await manager.broadcast({"event": "member_password_changed", "id": user_id, "has_member_password": False})
@@ -368,6 +377,6 @@ async def end_membership(user_id: int, request: Request):
     await manager.broadcast({"event": "membership_updated", "id": user_id, "membership_expires_at": now_iso})
 
     with db_cursor() as cur:
-        cur.execute(_USER_WITH_ATTENDANCE_SELECT + " WHERE u.id = ?", (user_id,))
+        cur.execute(_user_select() + " WHERE u.id = ?", (user_id,))
         updated_row = cur.fetchone()
     return _row_to_user_out(updated_row)

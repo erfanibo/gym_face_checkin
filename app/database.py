@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS registered_users (
 CREATE TABLE IF NOT EXISTS pending_queue (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     encoding            BLOB NOT NULL,
+    -- which recognizer model made `encoding` (see app/recognizer/). Vectors of different models
+    -- are not comparable; rows made by an older/other model are re-embedded from photo_path
+    -- when an operator registers or assigns them. 'dlib' = everything created before this column.
+    model               TEXT NOT NULL DEFAULT 'dlib',
     photo_path          TEXT NOT NULL,
     first_seen_at       TEXT NOT NULL,
     last_seen_at        TEXT NOT NULL,
@@ -74,7 +78,10 @@ CREATE TABLE IF NOT EXISTS member_face_samples (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES registered_users(id),
     encoding    BLOB NOT NULL,
-    source      TEXT NOT NULL DEFAULT 'registration',  -- 'registration' | 'assigned'
+    -- which recognizer model made `encoding` ('dlib', 'deepface/SFace', ...). The engine only
+    -- loads samples of the ACTIVE model; other models' samples are kept (a way back), never compared.
+    model       TEXT NOT NULL DEFAULT 'dlib',
+    source      TEXT NOT NULL DEFAULT 'registration',  -- 'registration' | 'assigned' | 'migration'
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -253,6 +260,19 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE registered_users ADD COLUMN membership_expires_at TEXT")
 
 
+def _migrate_vector_model_column(conn: sqlite3.Connection):
+    """
+    Vectors used to come from one fixed engine (dlib). Now the recognizer is swappable
+    (app/recognizer/) and a vector is only meaningful for the model that made it, so
+    member_face_samples and pending_queue get a `model` column. Every row that already exists
+    was made by dlib, which is exactly the column's default -- nothing is rewritten or deleted.
+    """
+    for table in ("member_face_samples", "pending_queue"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if "model" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN model TEXT NOT NULL DEFAULT 'dlib'")
+
+
 def _migrate_member_password(conn: sqlite3.Connection):
     user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(registered_users)")}
     if "member_password_hash" not in user_cols:
@@ -410,6 +430,7 @@ def init_db():
     with _lock:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        _migrate_vector_model_column(conn)
         _migrate_recognition_log_nullable(conn)
         _migrate_registered_users_encoding_nullable(conn)
         _migrate_member_password(conn)  # AFTER the table rebuild above, which copies a fixed column list

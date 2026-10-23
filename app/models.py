@@ -38,6 +38,11 @@ class CameraStatus(BaseModel):
         None,
         description="علت وصل‌نبودن: device_missing | no_permission | open_failed | no_frames (None وقتی وصل است)",
     )
+    recognizer_ready: bool = Field(
+        True,
+        description="آیا مدل‌های تشخیص چهره بارگذاری شده‌اند (بار اول ممکن است وزن‌ها دانلود شوند)",
+    )
+    recognizer_error: Optional[str] = Field(None, description="علت آماده‌نبودن موتور تشخیص چهره (None وقتی آماده است)")
 
 
 class AssignPendingRequest(BaseModel):

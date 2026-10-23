@@ -2,20 +2,25 @@
 Core recognition engine.
 
 Runs entirely in a background `threading.Thread` (NOT an asyncio task) because
-cv2.VideoCapture().read() and face_recognition's detection/encoding calls are
+cv2.VideoCapture().read() and the recognizer's detection/embedding calls are
 blocking, CPU-bound calls -- running them inside the asyncio event loop would
 freeze the whole FastAPI server (including the WebSocket updates) while a
 frame is being processed.
 
+The face library itself (DeepFace, or the older dlib) lives behind
+app/recognizer/: this file only asks it "which faces are in this frame, and what
+is each one's vector" and compares vectors. Swapping the library or model never
+touches the logic below.
+
 Flow per processed frame:
-  1. Grab frame from the webcam, downscale, find faces + 128-d encodings.
+  1. Grab frame from the webcam, find faces + their vectors (recognizer).
   2. If at least one face was found, immediately grab RECOGNITION_BURST_FRAMES-1
      more frames (right then, not waiting for the next scheduled frame) and
-     detect+encode faces in those too, folding each one into whichever
+     detect+embed faces in those too, folding each one into whichever
      "sighting" (from step 1) its face-box position is closest to.
-  3. For each sighting (now backed by up to RECOGNITION_BURST_FRAMES encodings):
+  3. For each sighting (now backed by up to RECOGNITION_BURST_FRAMES vectors):
        a. Compare against every ENROLLED member (registered_users) -- taking
-          whichever single encoding gave the closest match, not an average.
+          whichever single vector gave the closest match, not an average.
           -> match: log attendance (throttled, alternates ورود/خروج), write
              a "لاگ زنده" line, and stop.
        b. Compare against faces already waiting in pending_queue that were
@@ -24,13 +29,16 @@ Flow per processed frame:
              and write a "لاگ زنده" line for this unknown face too (debounced
              per pending_id, same cadence as a known match).
           NOTE: each pending entry keeps a small ROLLING WINDOW of its most
-          recent encodings (not just the first one it was created with), so
+          recent vectors (not just the first one it was created with), so
           natural pose/expression drift while someone stands at the camera
           doesn't cause them to "stop matching" and get re-enqueued as a
           brand-new face.
        c. Otherwise: this is a brand-new unknown face -> crop + save a photo,
           insert a pending_queue row, push a "new_pending" WebSocket event so
           the reception panel updates live, AND write a "لاگ زنده" line.
+
+Only vectors made by the ACTIVE recognizer model are ever compared (every stored
+vector is tagged with its model); see app/recognizer/base.py.
 """
 from __future__ import annotations
 
@@ -48,78 +56,42 @@ from datetime import datetime, timezone
 
 import cv2
 import numpy as np
-import face_recognition
 import httpx
 
 from . import config
 from .database import db_cursor
+from .face_samples import add_face_sample, blob_to_encoding, encoding_to_blob, now_iso as _now_iso  # noqa: F401  (re-exported: routers import these from here)
+from .recognizer import Recognizer, get_recognizer
+from .reembed import describe as _describe_reembed, reembed_missing_members
 from .ws_manager import manager
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def encoding_to_blob(encoding: np.ndarray) -> bytes:
-    """128 x float64 numpy array -> raw bytes, for storing in a BLOB column."""
-    return np.asarray(encoding, dtype=np.float64).tobytes()
-
-
-def blob_to_encoding(blob: bytes) -> np.ndarray:
-    return np.frombuffer(blob, dtype=np.float64)
-
-
-def add_face_sample(user_id: int, encoding: np.ndarray, source: str = "assigned") -> None:
-    """
-    Adds one more recognition sample for an EXISTING member. Used both right
-    after registration (source='registration', one call from
-    routers/queue.py:register_pending) and whenever an operator later says
-    "this pending-queue face is actually this same member, just a different
-    angle/light" (source='assigned', routers/queue.py:assign_pending_to_member).
-
-    Caps each member at config.MAX_FACE_SAMPLES_PER_MEMBER samples: once the
-    cap is hit, the OLDEST sample is dropped to make room for the new one.
-    This keeps the per-frame comparison cost bounded (see FaceEngine.
-    _match_known) and naturally rotates a member's profile toward their most
-    recent appearances instead of growing forever.
-
-    Callers are responsible for calling FaceEngine.reload_known_users()
-    afterwards so the background camera thread's in-memory cache picks up
-    the new sample immediately, rather than waiting for the next full reload.
-    """
-    with db_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO member_face_samples (user_id, encoding, source, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, encoding_to_blob(encoding), source, _now_iso()),
-        )
-        cur.execute(
-            "SELECT id FROM member_face_samples WHERE user_id=? ORDER BY id ASC",
-            (user_id,),
-        )
-        sample_ids = [r["id"] for r in cur.fetchall()]
-        overflow = len(sample_ids) - config.MAX_FACE_SAMPLES_PER_MEMBER
-        if overflow > 0:
-            oldest = [(i,) for i in sample_ids[:overflow]]
-            cur.executemany("DELETE FROM member_face_samples WHERE id=?", oldest)
-
-
 class FaceEngine:
-    def __init__(self, loop: asyncio.AbstractEventLoop):
+    def __init__(self, loop: asyncio.AbstractEventLoop, recognizer: Recognizer | None = None):
         self._loop = loop
         self._thread: threading.Thread | None = None
         self._running = False
         self._video: cv2.VideoCapture | None = None  # set in _run_loop; read by _capture_burst_frames too
 
+        # The face library (DeepFace / dlib). Injectable so tests can use a fake.
+        self._recognizer: Recognizer = recognizer if recognizer is not None else get_recognizer()
+        self._tolerances = self._recognizer.tolerances()
+
+        # False until the recognizer's models are loaded (first start may download weights) and
+        # member vectors are rebuilt for the active model; recognizer_error says why not, if it failed.
+        self.recognizer_ready: bool = False
+        self.recognizer_error: str | None = None
+
         # in-memory caches mirrored from SQLite, refreshed on demand so the
         # hot per-frame loop never has to hit the DB just to compare vectors.
         # Each member can have MULTIPLE samples (member_face_samples table),
-        # so these are flat, parallel lists: _known_sample_user_ids[i] is the
-        # owner of _known_sample_encodings[i]. A member with 8 samples simply
-        # appears 8 times, once per sample -- face_distance() compares the
-        # incoming frame against all of them at once and we take whichever
-        # single sample is closest, from whichever member.
+        # so these are parallel: _known_sample_user_ids[i] is the owner of row i
+        # of _known_matrix. A member with 8 samples simply appears 8 times, once
+        # per sample -- the recognizer compares the incoming face against all of
+        # them at once and we take whichever single sample is closest, from
+        # whichever member. Only samples of the ACTIVE model are loaded.
         self._known_sample_user_ids: list[int] = []
-        self._known_sample_encodings: list[np.ndarray] = []
+        self._known_matrix: np.ndarray | None = None
 
         # True once cv2.VideoCapture is actually open and giving frames.
         # Plain bool, no lock -- same as `_running`/`_video` below, read from
@@ -169,15 +141,23 @@ class FaceEngine:
         name cache to keep in sync here.
         """
         with db_cursor() as cur:
-            cur.execute("SELECT user_id, encoding FROM member_face_samples")
+            cur.execute(
+                "SELECT user_id, encoding FROM member_face_samples WHERE model=?",
+                (self._recognizer.model_id,),
+            )
             rows = cur.fetchall()
-        self._known_sample_user_ids = [r["user_id"] for r in rows]
-        self._known_sample_encodings = [blob_to_encoding(r["encoding"]) for r in rows]
+        vectors = [blob_to_encoding(r["encoding"]) for r in rows]
+        # a corrupt/odd-length blob must not make np.vstack (and with it the whole camera loop) fail
+        dim = max((len(v) for v in vectors), default=0)
+        keep = [i for i, v in enumerate(vectors) if len(v) == dim]
+        self._known_sample_user_ids = [rows[i]["user_id"] for i in keep]
+        self._known_matrix = np.vstack([vectors[i] for i in keep]) if keep else None
 
     def reload_pending_queue(self):
         with db_cursor() as cur:
             cur.execute(
-                "SELECT id, encoding, last_seen_at FROM pending_queue WHERE status='pending'"
+                "SELECT id, encoding, last_seen_at FROM pending_queue WHERE status='pending' AND model=?",
+                (self._recognizer.model_id,),
             )
             rows = cur.fetchall()
         self._pending_cache = [
@@ -265,6 +245,8 @@ class FaceEngine:
         frame_count = 0
         read_failures = 0
         try:
+            if not self._prepare_recognizer():
+                return  # stop() was called while still loading
             while self._running:
                 if video is None:
                     video = self._try_open_camera()
@@ -308,6 +290,56 @@ class FaceEngine:
             if video is not None:
                 video.release()
             self._set_camera_connected(False)
+
+    def _sleep_while_running(self, seconds: float):
+        """Sleep, but wake up promptly when stop() is called."""
+        deadline = time.monotonic() + seconds
+        while self._running and time.monotonic() < deadline:
+            time.sleep(0.2)
+
+    def _prepare_recognizer(self) -> bool:
+        """
+        Loads the recognizer's models (the very first start may download their weights, which needs
+        internet once), then rebuilds member vectors for the active model from their stored photos
+        (reembed.py; a no-op when nothing is missing). Retries every CAMERA_RETRY_SECONDS if the
+        models cannot be loaded -- e.g. first start while offline -- instead of dying silently, and
+        reports the reason in self.recognizer_error / the "recognizer_status" WebSocket event.
+        Returns False only if stop() was called before it finished.
+        """
+        while self._running:
+            try:
+                self._recognizer.warm_up()
+                break
+            except Exception as exc:
+                self._set_recognizer_state(False, f"{type(exc).__name__}: {exc}")
+                self._sleep_while_running(config.CAMERA_RETRY_SECONDS)
+        else:
+            return False
+
+        try:
+            report = reembed_missing_members(self._recognizer, should_stop=lambda: not self._running)
+            if report.migrated or report.needs_attention:
+                print(f"[face_engine] {_describe_reembed(report, self._recognizer.model_id)}")
+            if report.migrated:
+                self.reload_known_users()
+        except Exception as exc:  # recognition itself still works for everyone who has samples
+            print(f"[face_engine] re-embedding member photos failed: {type(exc).__name__}: {exc}")
+
+        self._set_recognizer_state(True, None)
+        return self._running
+
+    def _set_recognizer_state(self, ready: bool, error: str | None):
+        """Edge-triggered like _set_camera_connected: logs/broadcasts only on a real change."""
+        if ready == self.recognizer_ready and error == self.recognizer_error:
+            return
+        self.recognizer_ready = ready
+        self.recognizer_error = error
+        if ready:
+            print(f"[face_engine] recognizer {self._recognizer.model_id} ready")
+        else:
+            print(f"[face_engine] recognizer {self._recognizer.model_id} not ready, will retry every "
+                  f"{config.CAMERA_RETRY_SECONDS}s: {error}")
+        self._broadcast_soon({"event": "recognizer_status", "ready": ready, "error": error})
 
     def _diagnose_open_failure(self) -> str:
         """Best guess at WHY the camera could not be opened, as a problem code (see camera_problem)."""
@@ -388,26 +420,15 @@ class FaceEngine:
                       + (f" | video devices visible here: {', '.join(seen) or 'none'}" if sys.platform.startswith("linux") else ""))
         self._broadcast_soon({"event": "camera_status", "connected": connected, "problem": problem})
 
-    def _detect(self, frame: np.ndarray) -> tuple[list[tuple], list[np.ndarray]]:
-        """Downscale + detect + encode. Shared by the primary frame and every
-        extra burst frame below so both go through the exact same pipeline."""
-        small = cv2.resize(frame, (0, 0), fx=config.FRAME_RESIZE_SCALE, fy=config.FRAME_RESIZE_SCALE)
-        rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-        locations = face_recognition.face_locations(rgb_small)
-        if not locations:
-            return [], []
-        encodings = face_recognition.face_encodings(rgb_small, locations)
-        return locations, encodings
-
     def _process_frame(self, frame: np.ndarray):
-        locations, encodings = self._detect(frame)
-        if not locations:
+        faces = self._recognizer.detect_and_embed(frame)
+        if not faces:
             return
 
         # one "sighting" per face found in THIS frame; extra burst frames
-        # below just add more encodings onto whichever sighting they're
+        # below just add more vectors onto whichever sighting they're
         # closest to, they never start new ones
-        sightings = [{"location": loc, "encodings": [enc]} for loc, enc in zip(locations, encodings)]
+        sightings = [{"location": f.box, "encodings": [f.embedding]} for f in faces]
 
         for _ in range(config.RECOGNITION_BURST_FRAMES - 1):
             if self._video is None:
@@ -415,11 +436,10 @@ class FaceEngine:
             ok, extra_frame = self._video.read()
             if not ok:
                 continue
-            extra_locations, extra_encodings = self._detect(extra_frame)
-            for loc, enc in zip(extra_locations, extra_encodings):
-                sighting = self._closest_sighting(sightings, loc)
+            for face in self._recognizer.detect_and_embed(extra_frame):
+                sighting = self._closest_sighting(sightings, face.box)
                 if sighting is not None:
-                    sighting["encodings"].append(enc)
+                    sighting["encodings"].append(face.embedding)
                 # if nothing is close enough, this extra face is dropped --
                 # it's either someone else who just stepped into frame, or
                 # the original person moved too much; safer to ignore it
@@ -456,7 +476,7 @@ class FaceEngine:
     # ------------------------------------------------------------------ #
     # per-face decision tree
     # ------------------------------------------------------------------ #
-    def _handle_face(self, encodings: list[np.ndarray], location_small: tuple, full_frame: np.ndarray):
+    def _handle_face(self, encodings: list[np.ndarray], box: tuple, full_frame: np.ndarray):
         user_id, distance = self._match_known(encodings)
         if user_id is not None:
             self._maybe_log_attendance(user_id)
@@ -473,7 +493,7 @@ class FaceEngine:
             self._maybe_log_unknown_recognition(pending_id, distance)
             return
 
-        pending_id = self._enqueue_new_face(encoding, location_small, full_frame)
+        pending_id = self._enqueue_new_face(encoding, box, full_frame)
         self._maybe_log_unknown_recognition(pending_id, distance)
 
     def _match_known(self, encodings: list[np.ndarray]) -> tuple[int | None, float | None]:
@@ -490,19 +510,21 @@ class FaceEngine:
         used to log "closest known match was 0.58 away" on unknown-face log
         entries, which is handy for tuning KNOWN_USER_TOLERANCE later.
         """
-        if not self._known_sample_encodings:
+        known = self._known_matrix  # one reference, so a concurrent reload can't swap it mid-loop
+        user_ids = self._known_sample_user_ids
+        if known is None or len(user_ids) != len(known):
             return None, None
 
         best_user_id, best_distance = None, None
         for encoding in encodings:
-            distances = face_recognition.face_distance(self._known_sample_encodings, encoding)
+            distances = self._recognizer.distances(known, encoding)
             idx = int(np.argmin(distances))
             distance = float(distances[idx])
             if best_distance is None or distance < best_distance:
                 best_distance = distance
-                best_user_id = self._known_sample_user_ids[idx]
+                best_user_id = user_ids[idx]
 
-        if best_distance is not None and best_distance <= config.KNOWN_USER_TOLERANCE:
+        if best_distance is not None and best_distance <= self._tolerances.known:
             return best_user_id, best_distance
         return None, best_distance
 
@@ -519,19 +541,22 @@ class FaceEngine:
 
         flat_ids: list[int] = []
         flat_encodings: list[np.ndarray] = []
+        dim = len(encoding)
         for p in self._pending_cache:
             if (now - datetime.fromisoformat(p["last_seen"])).total_seconds() > config.PENDING_DEDUP_WINDOW_SECONDS:
                 continue
             for sample in p["encodings"]:
+                if len(sample) != dim:
+                    continue
                 flat_ids.append(p["id"])
                 flat_encodings.append(sample)
 
         if not flat_encodings:
             return None
 
-        distances = face_recognition.face_distance(flat_encodings, encoding)
+        distances = self._recognizer.distances(np.vstack(flat_encodings), encoding)
         best_idx = int(np.argmin(distances))
-        if distances[best_idx] <= config.PENDING_DEDUP_TOLERANCE:
+        if distances[best_idx] <= self._tolerances.pending:
             return flat_ids[best_idx]
         return None
 
@@ -554,15 +579,15 @@ class FaceEngine:
                     p["encodings"] = p["encodings"][-config.PENDING_DEDUP_MAX_SAMPLES:]
                 break
 
-    def _enqueue_new_face(self, encoding: np.ndarray, location_small: tuple, full_frame: np.ndarray) -> int:
+    def _enqueue_new_face(self, encoding: np.ndarray, box: tuple, full_frame: np.ndarray) -> int:
         now = _now_iso()
-        photo_path = self._save_face_crop(full_frame, location_small)
+        photo_path = self._save_face_crop(full_frame, box)
 
         with db_cursor(commit=True) as cur:
             cur.execute(
-                """INSERT INTO pending_queue (encoding, photo_path, first_seen_at, last_seen_at, status)
-                   VALUES (?, ?, ?, ?, 'pending')""",
-                (encoding_to_blob(encoding), str(photo_path), now, now),
+                """INSERT INTO pending_queue (encoding, model, photo_path, first_seen_at, last_seen_at, status)
+                   VALUES (?, ?, ?, ?, ?, 'pending')""",
+                (encoding_to_blob(encoding), self._recognizer.model_id, str(photo_path), now, now),
             )
             new_id = cur.lastrowid
 
@@ -577,10 +602,10 @@ class FaceEngine:
 
         return new_id
 
-    def _save_face_crop(self, full_frame: np.ndarray, location_small: tuple):
-        top, right, bottom, left = location_small
-        scale = int(round(1 / config.FRAME_RESIZE_SCALE))
-        top, right, bottom, left = top * scale, right * scale, bottom * scale, left * scale
+    def _save_face_crop(self, full_frame: np.ndarray, box: tuple):
+        # `box` is (top, right, bottom, left) in pixels of the FULL frame (the recognizer already
+        # scaled back whatever shrinking it did internally)
+        top, right, bottom, left = box
 
         pad = 20
         h, w = full_frame.shape[:2]
