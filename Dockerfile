@@ -26,7 +26,10 @@ ARG DEEPFACE_MODEL=SFace
 ARG DEEPFACE_DETECTOR=yunet
 ENV DEEPFACE_MODEL=${DEEPFACE_MODEL} \
     DEEPFACE_DETECTOR=${DEEPFACE_DETECTOR}
-RUN python -c "from deepface.modules import modeling; \
+# (the weights folder must exist first: importing only deepface.modules.modeling does NOT create it,
+# and the download then fails with "No such file or directory: .../.deepface/weights")
+RUN mkdir -p "${DEEPFACE_HOME}/.deepface/weights" \
+ && python -c "from deepface import DeepFace; from deepface.modules import modeling; \
 modeling.build_model(task='facial_recognition', model_name='${DEEPFACE_MODEL}'); \
 modeling.build_model(task='face_detector', model_name='${DEEPFACE_DETECTOR}'); \
 print('weights ready')"
