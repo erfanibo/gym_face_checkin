@@ -75,6 +75,19 @@
     font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
   }
   .block-hint { color: var(--muted); font-size: 13px; margin: -8px 0 16px; line-height: 1.9; }
+  .reset-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-width: 640px; }
+  .reset-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px; background: var(--panel-2);
+                border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .reset-item.locked { opacity: .65; cursor: default; }
+  .reset-item input { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--danger); flex: none; }
+  .reset-item b { font-size: 13.5px; font-weight: 600; }
+  .reset-item .reset-count { color: var(--muted); font-size: 12px; margin-inline-start: 6px; }
+  .reset-item small { display: block; color: var(--muted); font-size: 12px; line-height: 1.8; margin-top: 2px; }
+  .reset-danger-zone { margin-top: 30px; padding: 18px; max-width: 640px; border: 1px solid rgba(224,86,86,0.5);
+                       border-radius: 12px; background: rgba(224,86,86,0.06); }
+  .reset-danger-zone h3 { margin: 0 0 6px; font-size: 14.5px; color: var(--danger); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:disabled { opacity: .4; cursor: not-allowed; }
   /* update page */
   .update-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
   .update-card h3 { margin: 0 0 4px; font-size: 14.5px; }
@@ -826,6 +839,30 @@
         <div class="error-msg" id="restoreStatusMsg"></div>
       </div>
 
+      <!-- ============ تنظیمات: بازنشانی اطلاعات ============ -->
+      <div class="page" data-page="settings-reset" style="--acc:var(--c-settings)">
+        <div class="section-title"><h2>بازنشانی اطلاعات</h2></div>
+        <p class="block-hint">
+          مواردی را که می‌خواهید پاک شود تیک بزنید. حذف <b>قابل برگشت نیست</b>؛ اگر ممکن است دوباره به آن نیاز پیدا کنید،
+          اول از بخش «پشتیبان‌گیری (بکاپ)» یک نسخه دانلود کنید.
+          <a href="#" onclick="goToPage('settings-backup'); return false;" style="color:var(--accent);">رفتن به پشتیبان‌گیری</a>
+        </p>
+        <div class="reset-list" id="resetList"></div>
+        <div class="error-msg" id="resetListError"></div>
+        <div class="modal-actions" style="margin-top:6px; max-width:280px;">
+          <button class="btn-danger" id="resetSelectedBtn" onclick="openResetConfirm('selected')" disabled>حذف موارد انتخاب‌شده</button>
+        </div>
+
+        <div class="reset-danger-zone">
+          <h3>حذف همه‌ی اطلاعات</h3>
+          <p class="block-hint" style="margin:0 0 14px;">
+            همه‌ی اعضا، چهره‌ها، عکس‌ها، ترددها، برنامه‌های تمرینی، تعرفه‌ها، خریدها، صف انتظار، لاگ‌ها و تنظیمات
+            (اطلاعات باشگاه و رفتار ثبت تردد) پاک می‌شود و سیستم مثل روز اول می‌شود. فقط <b>رمز مدیر</b> می‌ماند.
+          </p>
+          <button class="btn-danger" onclick="openResetConfirm('all')">حذف همه‌ی اطلاعات</button>
+        </div>
+      </div>
+
       <!-- ============ تنظیمات: به‌روزرسانی سیستم ============ -->
       <div class="page" data-page="settings-update" style="--acc:var(--c-settings)">
         <div class="member-row" style="margin-bottom:18px;">
@@ -903,6 +940,27 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closePlanModal()">انصراف</button>
       <button class="btn-primary" id="planSaveBtn" onclick="submitPlan()">ذخیره‌ی تعرفه</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="resetOverlay">
+  <div class="modal" style="max-width:460px;">
+    <h3 id="resetModalTitle">تأیید حذف</h3>
+    <p class="block-hint" id="resetModalIntro" style="margin:0 0 8px;"></p>
+    <ul id="resetModalList" style="margin:0 0 14px; padding-inline-start:20px; font-size:13px; line-height:2;"></ul>
+    <div class="field">
+      <label id="resetConfirmLabel"></label>
+      <input id="resetConfirmInput" type="text" autocomplete="off" oninput="updateResetConfirmState()" />
+    </div>
+    <div class="field" id="resetPasswordField" style="display:none;">
+      <label>رمز مدیر</label>
+      <input id="resetPasswordInput" type="password" autocomplete="current-password" oninput="updateResetConfirmState()" />
+    </div>
+    <div class="error-msg" id="resetModalError"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeResetModal()">انصراف</button>
+      <button class="btn-danger" id="resetSubmitBtn" onclick="submitReset()" disabled>حذف</button>
     </div>
   </div>
 </div>
@@ -1044,6 +1102,7 @@ const NAV = [
       { id: 'settings-users', label: 'کاربران و دسترسی‌ها', page: 'settings-users', title: 'کاربران و دسترسی‌ها', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-log', label: 'لاگ سیستم', page: 'settings-log', title: 'لاگ سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-backup', label: 'پشتیبان‌گیری (بکاپ)', page: 'settings-backup', title: 'پشتیبان‌گیری (بکاپ)', subtitle: 'پیگیری و مدیریت سیستم' },
+      { id: 'settings-reset', label: 'بازنشانی اطلاعات', page: 'settings-reset', title: 'بازنشانی اطلاعات', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-update', label: 'به‌روزرسانی سیستم', page: 'settings-update', title: 'به‌روزرسانی سیستم', subtitle: 'پیگیری و مدیریت سیستم' },
       { id: 'settings-info', label: 'اطلاعات باشگاه', page: 'settings-info', title: 'اطلاعات باشگاه', subtitle: 'پیگیری و مدیریت سیستم' },
   ]},
@@ -1059,6 +1118,7 @@ const PAGE_LOADERS = {
   'reception-settings-behavior': loadBehaviorSettings,
   'settings-info': loadClubInfo,
   'settings-update': loadSystemVersion,
+  'settings-reset': loadResetPreview,
   'members-list': loadMembers,
   'members-renew': async () => { await ensureMembersLoaded(); populateRenewSelect(); await refreshPlanSelects(); },
   'members-add': refreshPlanSelects,
@@ -2587,6 +2647,145 @@ async function restoreBackup(event) {
 }
 
 /* ============================================================ */
+/* بازنشانی اطلاعات                                               */
+/* ============================================================ */
+let resettingNow = false;
+let resetPreview = null;          // پاسخ GET /api/reset/preview
+const resetUserChecked = new Set();   // فقط مواردی که خود کاربر تیک زده
+let resetMode = 'selected';       // 'selected' | 'all'
+
+function normalizeConfirmText(text) {
+  return String(text).replace(/[\u200c\u200d\u200e\u200f\u202a-\u202c]/g, '').split(/\s+/).filter(Boolean).join(' ');
+}
+
+function resetEffectiveSelection() {
+  // آنچه واقعاً حذف می‌شود: انتخاب کاربر + موارد وابسته‌ی آن (مثلاً با «اعضا»، تردد و برنامه‌ها هم می‌روند)
+  const all = new Set(resetUserChecked);
+  if (resetPreview) {
+    for (const c of resetPreview.categories) {
+      if (resetUserChecked.has(c.id)) c.implies.forEach(id => all.add(id));
+    }
+  }
+  return all;
+}
+
+async function loadResetPreview() {
+  const errorEl = document.getElementById('resetListError');
+  errorEl.textContent = '';
+  const res = await fetch(`${API_BASE}/api/reset/preview`);
+  if (!res.ok) { errorEl.textContent = 'بارگذاری فهرست انجام نشد.'; return; }
+  resetPreview = await res.json();
+  renderResetList();
+}
+
+function renderResetList() {
+  const listEl = document.getElementById('resetList');
+  if (!resetPreview) { listEl.innerHTML = ''; return; }
+  const effective = resetEffectiveSelection();
+  const names = Object.fromEntries(resetPreview.categories.map(c => [c.id, c.label]));
+  listEl.innerHTML = resetPreview.categories.map(c => {
+    const locked = effective.has(c.id) && !resetUserChecked.has(c.id);
+    const impliedBy = locked
+      ? resetPreview.categories.filter(o => resetUserChecked.has(o.id) && o.implies.includes(c.id)).map(o => names[o.id])
+      : [];
+    return `
+      <label class="reset-item${locked ? ' locked' : ''}">
+        <input type="checkbox" data-id="${c.id}" ${effective.has(c.id) ? 'checked' : ''} ${locked ? 'disabled' : ''}
+               onchange="onResetToggle('${c.id}', this.checked)" />
+        <span>
+          <b>${c.label}</b><span class="reset-count">${Number(c.count).toLocaleString('fa-IR')} مورد</span>
+          ${c.hint ? `<small>${c.hint}</small>` : ''}
+          ${locked ? `<small style="color:var(--danger);">همراه با «${impliedBy.join('، ')}» حذف می‌شود</small>` : ''}
+        </span>
+      </label>`;
+  }).join('');
+  document.getElementById('resetSelectedBtn').disabled = resetUserChecked.size === 0;
+}
+
+function onResetToggle(id, checked) {
+  if (checked) resetUserChecked.add(id); else resetUserChecked.delete(id);
+  renderResetList();
+}
+
+function openResetConfirm(mode) {
+  if (!resetPreview) return;
+  resetMode = mode;
+  const countOf = Object.fromEntries(resetPreview.categories.map(c => [c.id, c.count]));
+  const listEl = document.getElementById('resetModalList');
+  const isAll = mode === 'all';
+  let items;
+  if (isAll) {
+    items = resetPreview.categories.map(c => c);
+  } else {
+    const effective = resetEffectiveSelection();
+    items = resetPreview.categories.filter(c => effective.has(c.id));
+    if (!items.length) return;
+  }
+  document.getElementById('resetModalTitle').textContent = isAll ? 'حذف همه‌ی اطلاعات' : 'حذف موارد انتخاب‌شده';
+  document.getElementById('resetModalIntro').textContent = isAll
+    ? 'این موارد برای همیشه پاک می‌شوند و سیستم مثل روز اول می‌شود (فقط رمز مدیر می‌ماند):'
+    : 'این موارد برای همیشه پاک می‌شوند:';
+  listEl.innerHTML = items.map(c => `<li>${c.label} — <b>${Number(countOf[c.id]).toLocaleString('fa-IR')}</b> مورد</li>`).join('')
+    + (isAll ? '<li>تنظیمات (اطلاعات باشگاه و رفتار ثبت تردد)</li>' : '');
+  const word = isAll ? resetPreview.confirm_all : resetPreview.confirm_selected;
+  document.getElementById('resetConfirmLabel').textContent = `برای تأیید، «${word}» را تایپ کنید`;
+  document.getElementById('resetConfirmInput').value = '';
+  document.getElementById('resetPasswordInput').value = '';
+  document.getElementById('resetPasswordField').style.display = isAll ? '' : 'none';
+  document.getElementById('resetModalError').textContent = '';
+  document.getElementById('resetSubmitBtn').textContent = isAll ? 'حذف همه‌ی اطلاعات' : 'حذف';
+  updateResetConfirmState();
+  document.getElementById('resetOverlay').classList.add('open');
+  document.getElementById('resetConfirmInput').focus();
+}
+
+function closeResetModal() {
+  document.getElementById('resetOverlay').classList.remove('open');
+}
+
+function updateResetConfirmState() {
+  if (!resetPreview) return;
+  const isAll = resetMode === 'all';
+  const word = isAll ? resetPreview.confirm_all : resetPreview.confirm_selected;
+  let ok = normalizeConfirmText(document.getElementById('resetConfirmInput').value) === word;
+  if (isAll) ok = ok && document.getElementById('resetPasswordInput').value.length > 0;
+  document.getElementById('resetSubmitBtn').disabled = !ok;
+}
+
+async function submitReset() {
+  const errorEl = document.getElementById('resetModalError');
+  const btn = document.getElementById('resetSubmitBtn');
+  errorEl.textContent = '';
+  const isAll = resetMode === 'all';
+  const confirmText = document.getElementById('resetConfirmInput').value;
+  const url = isAll ? `${API_BASE}/api/reset/all` : `${API_BASE}/api/reset`;
+  const body = isAll
+    ? { confirm: confirmText, password: document.getElementById('resetPasswordInput').value }
+    : { confirm: confirmText, categories: Array.from(resetUserChecked) };
+
+  btn.disabled = true;
+  resettingNow = true;
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      resettingNow = false;
+      errorEl.textContent = (typeof result.detail === 'string') ? result.detail : 'حذف انجام نشد.';
+      return;
+    }
+    closeResetModal();
+    alert(isAll ? 'همه‌ی اطلاعات پاک شد. صفحه دوباره بارگذاری می‌شود.' : 'موارد انتخاب‌شده پاک شد. صفحه دوباره بارگذاری می‌شود.');
+    window.location.reload();
+  } catch (e) {
+    resettingNow = false;
+    errorEl.textContent = 'ارتباط برقرار نشد. دوباره تلاش کنید.';
+  } finally {
+    btn.disabled = false;
+    updateResetConfirmState();
+  }
+}
+
+/* ============================================================ */
 /* WebSocket زنده                                                 */
 /* ============================================================ */
 setInterval(renderQueue, 10000);
@@ -2645,6 +2844,10 @@ function connectWs() {
       cameraConnected = msg.connected;
       cameraProblem = msg.problem || null;
       updateCameraBanner();
+    } else if (msg.event === 'data_reset') {
+      if (resettingNow) return;   // خودِ همین پنل شروع‌کننده بود و خودش رفرش می‌کند
+      alert('بخشی از اطلاعات توسط مدیر پاک شد. صفحه دوباره بارگذاری می‌شود.');
+      window.location.reload();
     } else if (msg.event === 'backup_restored') {
       if (restoringNow) return;
       alert('اطلاعات بازیابی شد. صفحه دوباره بارگذاری می‌شود.');
