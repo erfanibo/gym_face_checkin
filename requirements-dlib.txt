@@ -1,0 +1,4 @@
+# Only for RECOGNIZER_BACKEND=dlib (the previous engine, kept for comparison / as a way back).
+# dlib compiles from source: needs cmake + a C++ compiler (see README), takes several minutes.
+-r requirements.txt
+face_recognition>=1.3.0

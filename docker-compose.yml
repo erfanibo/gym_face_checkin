@@ -12,6 +12,18 @@ services:
       - CAMERA_FOURCC=${CAMERA_FOURCC:-}
       - CAMERA_WIDTH=${CAMERA_WIDTH:-0}
       - CAMERA_HEIGHT=${CAMERA_HEIGHT:-0}
+      # موتور تشخیص چهره: DeepFace (پیش‌فرض). مدل و آشکارساز را بعد از اجرای scripts/benchmark_deepface.py
+      # روی همین PC انتخاب کنید؛ با تغییر مدل، image را با همان مقدار دوباره build کنید (README).
+      - RECOGNIZER_BACKEND=${RECOGNIZER_BACKEND:-deepface}
+      - DEEPFACE_MODEL=${DEEPFACE_MODEL:-SFace}
+      - DEEPFACE_DETECTOR=${DEEPFACE_DETECTOR:-yunet}
+      # آستانه‌ها: خالی = پیش‌فرض خودِ مدل (فقط بعد از تست با افراد واقعی مقدار بدهید)
+      - KNOWN_USER_TOLERANCE=${KNOWN_USER_TOLERANCE:-}
+      - PENDING_DEDUP_TOLERANCE=${PENDING_DEDUP_TOLERANCE:-}
+      - REGISTRATION_DUPLICATE_FACE_TOLERANCE=${REGISTRATION_DUPLICATE_FACE_TOLERANCE:-}
+      - DEEPFACE_MIN_FACE_CONFIDENCE=${DEEPFACE_MIN_FACE_CONFIDENCE:-0.85}
+      - DEEPFACE_MIN_FACE_PIXELS=${DEEPFACE_MIN_FACE_PIXELS:-60}
+      - DEEPFACE_MAX_FRAME_SIDE=${DEEPFACE_MAX_FRAME_SIDE:-960}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
       # بررسی نسخه‌ی جدید (تنظیمات > به‌روزرسانی سیستم). «owner/repo» ریپوی خودتان اگر فورک کرده‌اید؛

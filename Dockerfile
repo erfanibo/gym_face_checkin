@@ -1,44 +1,36 @@
 # syntax=docker/dockerfile:1
 
-# ---------------------------------------------------------------------------
-# Stage 1: build — has cmake/gcc/openblas headers so `pip install dlib` can
-# compile from source (dlib ships no prebuilt wheel on PyPI for any Python
-# version, so this step is unavoidable and takes several minutes).
-# ---------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        libopenblas-dev \
-        liblapack-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-COPY requirements.txt .
-# --user installs into /root/.local so we can copy just that into the runtime
-# stage without dragging the whole build toolchain along.
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# ---------------------------------------------------------------------------
-# Stage 2: runtime — small image, only the shared libs actually needed at
-# runtime (openblas for dlib's linear algebra, libgl/glib for opencv).
-# ---------------------------------------------------------------------------
+# DeepFace (SFace + YuNet) runs on onnxruntime/OpenCV, so everything installs from prebuilt wheels:
+# no compiler, no cmake, no multi-minute dlib build, no TensorFlow.
+# (The old dlib engine, RECOGNIZER_BACKEND=dlib, needs a different image: see README.)
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libopenblas0 \
-        libgl1 \
         libglib2.0-0 \
         v4l-utils \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    DATA_DIR=/app/data
+ENV PYTHONUNBUFFERED=1 \
+    DATA_DIR=/app/data \
+    # model weights live in the image, so the running system never needs the internet
+    DEEPFACE_HOME=/opt/deepface
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Download the model weights NOW (build time has internet). If you later change DEEPFACE_MODEL /
+# DEEPFACE_DETECTOR in .env to something else, rebuild with the same values as build args:
+#   docker compose build --build-arg DEEPFACE_MODEL=Facenet512
+ARG DEEPFACE_MODEL=SFace
+ARG DEEPFACE_DETECTOR=yunet
+ENV DEEPFACE_MODEL=${DEEPFACE_MODEL} \
+    DEEPFACE_DETECTOR=${DEEPFACE_DETECTOR}
+RUN python -c "from deepface.modules import modeling; \
+modeling.build_model(task='facial_recognition', model_name='${DEEPFACE_MODEL}'); \
+modeling.build_model(task='face_detector', model_name='${DEEPFACE_DETECTOR}'); \
+print('weights ready')"
+
 COPY . .
 
 # Created here as a fallback; docker-compose.yml normally mounts a volume
