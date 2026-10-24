@@ -35,6 +35,26 @@ _PENDING_DEDUP_WINDOW_KEY = "behavior_pending_dedup_window_seconds"
 _MAX_FACE_SAMPLES_KEY = "behavior_max_face_samples_per_member"
 
 
+# مقدارهای پیش‌فرضِ همین چهار پارامتر، همان لحظه‌ی import (قبل از هر override از دیتابیس یا پنل) --
+# برای «بازنشانی همه‌ی اطلاعات» که باید بدون ری‌استارت به همین مقدارها برگردد.
+_BEHAVIOR_DEFAULTS = {
+    name: getattr(config, name)
+    for name in (
+        "ATTENDANCE_COOLDOWN_SECONDS",
+        "RECOGNITION_LOG_DEBOUNCE_SECONDS",
+        "PENDING_DEDUP_WINDOW_SECONDS",
+        "MAX_FACE_SAMPLES_PER_MEMBER",
+    )
+}
+
+
+def restore_defaults() -> None:
+    """After app_settings was emptied (routers/reset.py, "delete everything"): put the live config
+    back to its built-in defaults so the running system matches the now-empty settings."""
+    for name, value in _BEHAVIOR_DEFAULTS.items():
+        setattr(config, name, value)
+
+
 def apply_persisted_overrides() -> None:
     """فقط یک‌بار، موقع استارت سرور صدا زده می‌شود (main.py's lifespan)،
     حتماً قبل از `engine.start()` -- تا اگر قبلاً مقداری از پنل ذخیره شده،
