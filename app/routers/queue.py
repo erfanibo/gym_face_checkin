@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import auth, config
+from .. import auth
 from ..database import db_cursor, generate_unique_membership_code
 from ..membership import apply_plan, get_active_plan
 from ..phone import ensure_phone_free as _ensure_phone_free

@@ -85,7 +85,6 @@ def test_samples_of_another_model_are_never_compared(make_engine):
 
 
 def test_new_unknown_face_is_queued_with_its_model_and_a_full_frame_crop(make_engine, db):
-    from app import config
     engine = make_engine()
     engine._handle_face([unit(2)], BOX, FRAME)
 

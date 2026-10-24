@@ -1,10 +1,9 @@
 import cv2
-import numpy as np
 import pytest
 
 from app import config
 from app.database import db_cursor
-from app.face_samples import add_face_sample, blob_to_encoding, encoding_to_blob
+from app.face_samples import add_face_sample, blob_to_encoding
 from app.reembed import reembed_missing_members, resolve_photo
 from tests.fakes import FakeRecognizer, image_for, unit
 
